@@ -347,10 +347,10 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                 next_team_a_id: String(existing.next_team_a_id ?? ''),
                 next_team_b_id: String(existing.next_team_b_id ?? ''),
                 umpire_id: String((existing as any).umpire_id ?? ''),
-                status_id: String(existing.status_id ?? activeStatus?.id ?? '27'),
+                status_id: String(existing.status_id ?? activeStatus?.id ?? ''),
             });
         } else {
-            setCourtForm({ category_id: '', next_category_id: '', team_a_id: '', team_b_id: '', next_team_a_id: '', next_team_b_id: '', umpire_id: '', status_id: String(activeStatus?.id ?? '27') });
+            setCourtForm({ category_id: '', next_category_id: '', team_a_id: '', team_b_id: '', next_team_a_id: '', next_team_b_id: '', umpire_id: '', status_id: String(activeStatus?.id ?? '') });
         }
         setCourtModalOpen(true);
     };

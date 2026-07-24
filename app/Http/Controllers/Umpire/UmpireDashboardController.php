@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Umpire;
 use App\Events\MatchScoreUpdated;
 use App\Events\StandingsUpdated;
 use App\Http\Controllers\Controller;
-use App\Models\LiveCategory;
 use App\Models\LiveConfiguration;
 use App\Models\LiveMatchScore;
 use App\Models\LiveStanding;

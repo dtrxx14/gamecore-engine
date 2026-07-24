@@ -17,7 +17,7 @@ class UmpireSeeder extends Seeder
     public function run(): void
     {
         $umpireRole = Role::query()
-            ->where('type', 'organization')
+            ->where('type', 'login')
             ->where('slug', 'umpire')
             ->first();
 
@@ -27,16 +27,15 @@ class UmpireSeeder extends Seeder
         }
 
         $umpires = [
-            ['email' => 'umpire-1@gamecore.test', 'first_name' => 'Michael', 'last_name' => 'Smith'],
-            ['email' => 'umpire-2@gamecore.test', 'first_name' => 'Sarah', 'last_name' => 'Johnson'],
-            ['email' => 'umpire-3@gamecore.test', 'first_name' => 'David', 'last_name' => 'Williams'],
-            ['email' => 'umpire-4@gamecore.test', 'first_name' => 'Emily', 'last_name' => 'Brown'],
-            ['email' => 'umpire-5@gamecore.test', 'first_name' => 'James', 'last_name' => 'Jones'],
-            ['email' => 'umpire-6@gamecore.test', 'first_name' => 'Jessica', 'last_name' => 'Garcia'],
-            ['email' => 'umpire-7@gamecore.test', 'first_name' => 'Robert', 'last_name' => 'Miller'],
-            ['email' => 'umpire-8@gamecore.test', 'first_name' => 'Amanda', 'last_name' => 'Davis'],
-            ['email' => 'umpire-9@gamecore.test', 'first_name' => 'Christopher', 'last_name' => 'Rodriguez'],
-            ['email' => 'umpire-10@gamecore.test', 'first_name' => 'Jennifer', 'last_name' => 'Martinez'],
+            ['email' => 'umpire1@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Norman', 'last_name' => 'Dulag'],
+            ['email' => 'umpire2@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Alliyah Rhian', 'last_name' => 'Mendoza'],
+            ['email' => 'umpire3@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Tony', 'last_name' => 'Herrera'],
+            ['email' => 'umpire4@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Justine', 'last_name' => 'Atacador'],
+            ['email' => 'umpire5@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Irvin', 'last_name' => 'Navales'],
+            ['email' => 'umpire6@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'JC', 'last_name' => 'Gadiano'],
+            ['email' => 'umpire7@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Caleb', 'last_name' => 'Manguni'],
+            ['email' => 'umpire8@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'King Florence', 'last_name' => 'Capiña'],
+            ['email' => 'umpire9@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Aryz', 'last_name' => 'Zara'],
         ];
 
         foreach ($umpires as $data) {
@@ -47,7 +46,7 @@ class UmpireSeeder extends Seeder
             $user = User::create([
                 'email' => $data['email'],
                 'email_verified_at' => now(),
-                'password' => bcrypt('Test123!'),
+                'password' => bcrypt('Password123!'),
                 'role_id' => $umpireRole->id,
                 'status_id' => 1,
                 'is_organizer' => false,
@@ -60,13 +59,13 @@ class UmpireSeeder extends Seeder
                 'middle_name' => null,
                 'last_name' => $data['last_name'],
                 'contact_number' => '+63'.str_pad((string) random_int(100000000, 999999999), 9, '0', STR_PAD_LEFT),
-                'club' => 'GameCore Officiating',
-                'gender' => 'male',
+                'club' => 'GameCore Engine Officiating',
+                'gender' => $data['gender'],
                 'birthdate' => now()->subYears(25 + (array_search($data, $umpires) % 20))->subDays(array_search($data, $umpires) % 365)->format('Y-m-d'),
-                'nationality_id' => 1,
-                'state_province_id' => 1,
+                'nationality_id' => 173,
+                'state_province_id' => 3328,
                 'dupr_account' => 'UMP'.str_pad((string) (array_search($data, $umpires) + 1), 4, '0', STR_PAD_LEFT),
-                'bio' => sprintf('%s %s is a certified umpire registered with GameCore.', $data['first_name'], $data['last_name']),
+                'bio' => sprintf('%s %s is a certified umpire registered with GameCore Engine.', $data['first_name'], $data['last_name']),
             ]);
         }
     }

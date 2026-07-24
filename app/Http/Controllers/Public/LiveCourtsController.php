@@ -7,7 +7,6 @@ use App\Models\LiveConfiguration;
 use App\Models\LiveMatchScore;
 use App\Models\Status;
 use App\Models\User;
-use Illuminate\Http\Request;
 
 class LiveCourtsController extends Controller
 {
