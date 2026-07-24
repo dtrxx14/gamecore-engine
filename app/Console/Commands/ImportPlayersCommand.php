@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Imports\PlayerImport;
+use App\Models\PlayerInformation;
+use App\Models\User;
+use Illuminate\Console\Command;
 
 class ImportPlayersCommand extends Command
 {
@@ -23,6 +25,9 @@ class ImportPlayersCommand extends Command
             return self::FAILURE;
         }
 
+        User::truncate();
+        PlayerInformation::truncate();
+        
         $import = new PlayerImport($liveConfigurationId);
 
         $result = $import->import($file);
