@@ -15,6 +15,7 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         User::truncate();
+        PlayerInformation::truncate();
         $adminRole = Role::firstOrCreate(
             ['type' => 'login', 'slug' => 'admin'],
             ['name' => 'Admin', 'status_id' => 5]
