@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\LiveTeam;
 use App\Models\PlayerInformation;
 use App\Models\Role;
 use App\Models\User;
@@ -16,7 +17,8 @@ class UserSeeder extends Seeder
     {
         User::truncate();
         PlayerInformation::truncate();
-        
+        LiveTeam::truncate();
+
         $adminRole = Role::firstOrCreate(
             ['type' => 'login', 'slug' => 'admin'],
             ['name' => 'Admin', 'status_id' => 5]
