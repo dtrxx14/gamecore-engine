@@ -107,7 +107,7 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
     const [bothTeamsPresent, setBothTeamsPresent] = useState(initialPhase !== 'setup');
     const [defaultTimerActive, setDefaultTimerActive] = useState(false);
     const [defaultTimerExpired, setDefaultTimerExpired] = useState(false);
-    const [defaultTimerSeconds, setDefaultTimerSeconds] = useState(5);
+    const [defaultTimerSeconds, setDefaultTimerSeconds] = useState(300);
     const [setupComplete, setSetupComplete] = useState(initialSetupComplete);
 
     // Coin toss state - if data already exists, skip to complete phase
@@ -959,7 +959,7 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                         </button>
                                     </div>
                                     {!bothTeamsPresent && !defaultTimerActive && !defaultTimerExpired && (
-                                        <button onClick={() => { setDefaultTimerActive(true); setDefaultTimerSeconds(5); }} className="w-full flex items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors">
+                                        <button onClick={() => { setDefaultTimerActive(true); setDefaultTimerSeconds(300); }} className="w-full flex items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors">
                                             <Clock className="h-4 w-4" /> Start 5-min Default Timer
                                         </button>
                                     )}
