@@ -104,9 +104,9 @@ export default function LiveConfigurationCreate({ statuses }: Props) {
                 </Link>
 
                 {/* Page header */}
-                <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-indigo-500/15 p-6 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
+                <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-red-500/15 p-6 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-400 shadow-md">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-400 shadow-md">
                             <Activity className="h-6 w-6 text-white" />
                         </div>
                         <div>
@@ -125,7 +125,7 @@ export default function LiveConfigurationCreate({ statuses }: Props) {
                     {/* Match details section */}
                     <div className="rounded-xl border border-border/70 bg-card p-6 shadow-[0_10px_30px_-24px_rgba(0,0,0,0.35)]">
                         <div className="mb-5 flex items-center gap-2">
-                            <Settings2 className="h-5 w-5 text-indigo-500" />
+                            <Settings2 className="h-5 w-5 text-red-500" />
                             <h2 className="text-lg font-semibold text-foreground">Match details</h2>
                         </div>
 
@@ -139,7 +139,7 @@ export default function LiveConfigurationCreate({ statuses }: Props) {
                                     id="name"
                                     value={form.name}
                                     onChange={(e) => handleField('name', e.target.value)}
-                                    placeholder="e.g. Men's Doubles Finals"
+                                    placeholder="e.g. Court Wars 2026"
                                     className="mt-1.5"
                                 />
                                 {errors.name && (
@@ -219,7 +219,7 @@ export default function LiveConfigurationCreate({ statuses }: Props) {
                     {/* Court change section */}
                     <div className="rounded-xl border border-border/70 bg-card p-6 shadow-[0_10px_30px_-24px_rgba(0,0,0,0.35)]">
                         <div className="mb-5 flex items-center gap-2">
-                            <GripVertical className="h-5 w-5 text-indigo-500" />
+                            <GripVertical className="h-5 w-5 text-red-500" />
                             <h2 className="text-lg font-semibold text-foreground">Court change rules</h2>
                         </div>
 

@@ -488,10 +488,10 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                 </Link>
 
                 {/* Configuration Header */}
-                <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-indigo-500/15 p-6 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
+                <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-red-500/15 p-6 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex items-start gap-4">
-                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-400 shadow-md">
+                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-400 shadow-md">
                                 <Activity className="h-7 w-7 text-white" />
                             </div>
                             <div>
@@ -528,7 +528,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                         onClick={() => setCategoriesOpen((prev) => !prev)}
                     >
                         <div className="flex items-center gap-2">
-                            <Tags className="h-5 w-5 text-indigo-500" />
+                            <Tags className="h-5 w-5 text-red-500" />
                             <h2 className="text-lg font-semibold text-foreground">Categories</h2>
                             <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{configuration.categories?.length ?? 0}</span>
                         </div>
@@ -621,7 +621,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                         onClick={() => setTeamsOpen((prev) => !prev)}
                     >
                         <div className="flex items-center gap-2">
-                            <Users className="h-5 w-5 text-indigo-500" />
+                            <Users className="h-5 w-5 text-red-500" />
                             <h2 className="text-lg font-semibold text-foreground">Teams</h2>
                             <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{teams.length}</span>
                         </div>
@@ -657,7 +657,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                                         return (
                                             <div key={team.id} className="flex items-center justify-between px-4 py-3 transition hover:bg-primary/[0.02]">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/10 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-xs font-bold text-red-600 dark:text-red-400">
                                                         {team.name.charAt(0).toUpperCase()}
                                                     </div>
                                                     <div>
@@ -765,7 +765,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                                                             return (
                                                                 <tr
                                                                     key={standing.id}
-                                                                    className={`border-b border-border/40 transition hover:bg-primary/[0.02] ${isPlayingNow ? 'bg-indigo-500/5 font-medium' : ''}`}
+                                                                    className={`border-b border-border/40 transition hover:bg-primary/[0.02] ${isPlayingNow ? 'bg-red-500/5 font-medium' : ''}`}
                                                                 >
                                                                     <td className="px-3 py-2">
                                                                         <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
@@ -813,7 +813,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                 {/* Courts Grid */}
                 <div className="rounded-xl border border-border/70 bg-card p-6 shadow-[0_10px_30px_-24px_rgba(0,0,0,0.35)]">
                     <div className="mb-5 flex items-center gap-2">
-                        <Swords className="h-5 w-5 text-indigo-500" />
+                        <Swords className="h-5 w-5 text-red-500" />
                         <h2 className="text-lg font-semibold text-foreground">Courts</h2>
                         <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                             {configuration.match_scores?.length ?? 0} / {configuration.number_of_courts} assigned
@@ -827,12 +827,12 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                             return (
                                 <div
                                     key={courtNumber}
-                                    className="group relative rounded-lg border border-border/60 bg-gradient-to-br from-background to-muted/30 p-4 transition hover:border-indigo-500/30 hover:shadow-md"
+                                    className="group relative rounded-lg border border-border/60 bg-gradient-to-br from-background to-muted/30 p-4 transition hover:border-red-500/30 hover:shadow-md"
                                 >
                                     {/* Court Header */}
                                     <div className="mb-3 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-indigo-500/10 text-base font-bold text-indigo-600 dark:text-indigo-400">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-red-500/10 text-base font-bold text-red-600 dark:text-red-400">
                                                 {courtNumber}
                                             </div>
                                             <div>

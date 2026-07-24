@@ -9,7 +9,7 @@ import PlayerLayout from '@/layouts/player/layout';
 import UmpireLayout from '@/layouts/umpire/layout';
 import SettingsLayout from '@/layouts/settings/layout';
 
-const appName = import.meta.env.VITE_APP_NAME || 'GameCore';
+const appName = import.meta.env.VITE_APP_NAME || 'GameCore Engine';
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),

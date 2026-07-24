@@ -116,9 +116,9 @@ export default function UmpireDashboard({ groupedAssignments }: Props) {
                     {groupedAssignments.map((group) => (
                         <div key={group.configuration.id} className="space-y-4">
                             {/* Configuration Header */}
-                            <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-indigo-500/15 p-5 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
+                            <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-red-500/15 p-5 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
                                 <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-400 shadow-md">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-red-400 shadow-md">
                                         <Activity className="h-5 w-5 text-white" />
                                     </div>
                                     <div className="flex-1">
@@ -141,13 +141,13 @@ export default function UmpireDashboard({ groupedAssignments }: Props) {
                                 {group.courts.map((match) => (
                                     <div
                                         key={match.id}
-                                        className="group relative cursor-pointer rounded-lg border border-border/60 bg-gradient-to-br from-background to-muted/30 p-4 transition hover:border-indigo-500/30 hover:shadow-md"
+                                        className="group relative cursor-pointer rounded-lg border border-border/60 bg-gradient-to-br from-background to-muted/30 p-4 transition hover:border-red-500/30 hover:shadow-md"
                                         onClick={() => openMatchDetail(match)}
                                     >
                                         {/* Court Header */}
                                         <div className="mb-3 flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-indigo-500/10 text-base font-bold text-indigo-600 dark:text-indigo-400">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-red-500/10 text-base font-bold text-red-600 dark:text-red-400">
                                                     {match.court_number}
                                                 </div>
                                                 <div>

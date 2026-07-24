@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Activity, BookOpen, Folder, FolderGit2, LayoutGrid } from 'lucide-react';
+import { Activity, BookOpen, Folder, FolderGit2, LayoutGrid, Upload } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -36,6 +36,11 @@ const mainNavItems: NavItem[] = [
                 title: 'Match Configurations',
                 href: '/admin/live-configuration',
             },
+            {
+                title: 'Player Import',
+                href: '/admin/player-import',
+                icon: Upload,
+            },
         ],
     },
     {
@@ -55,18 +60,18 @@ const mainNavItems: NavItem[] = [
     }
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
+// const footerNavItems: NavItem[] = [
+//     {
+//         title: 'Repository',
+//         href: 'https://github.com/laravel/react-starter-kit',
+//         icon: FolderGit2,
+//     },
+//     {
+//         title: 'Documentation',
+//         href: 'https://laravel.com/docs/starter-kits#react',
+//         icon: BookOpen,
+//     },
+// ];
 
 export function AppSidebar() {
     return (
@@ -88,7 +93,7 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+                {/* <NavFooter items={footerNavItems} className="mt-auto" /> */}
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

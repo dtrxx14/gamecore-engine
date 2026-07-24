@@ -84,13 +84,13 @@ export default function LiveConfiguration({ configurations }: Props) {
         switch (system) {
             case 'side-out':
                 return (
-                    <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-400">
+                    <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950/50 dark:text-gray-400">
                         Side Out
                     </Badge>
                 );
             case 'rally-point':
                 return (
-                    <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/50 dark:text-purple-400">
+                    <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950/50 dark:text-gray-400">
                         Rally Point
                     </Badge>
                 );
@@ -121,10 +121,10 @@ export default function LiveConfiguration({ configurations }: Props) {
 
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4">
                 {/* Header */}
-                <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-indigo-500/15 p-6 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
+                <div className="rounded-xl border border-border/70 bg-gradient-to-br from-background via-card to-red-500/15 p-6 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.35)]">
                     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                         <div>
-                            <div className="inline-flex items-center gap-2 rounded-md border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                            <div className="inline-flex items-center gap-2 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-1 text-sm font-medium text-red-600 dark:text-red-400">
                                 <Activity className="size-4" />
                                 Match live configuration
                             </div>
@@ -179,14 +179,14 @@ export default function LiveConfiguration({ configurations }: Props) {
                                 {configurations.map((config) => (
                                     <div
                                         key={config.id}
-                                        className="group flex flex-col gap-4 px-6 py-5 transition hover:bg-primary/[0.02] sm:flex-row sm:items-center sm:justify-between"
+                                        className="group flex flex-col gap-4 px-6 py-5 transition hover:bg-red/[0.02] sm:flex-row sm:items-center sm:justify-between"
                                     >
                                         {/* Left: Info */}
                                         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
                                             {/* Icon + Name */}
                                             <div className="flex items-center gap-3">
-                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-gradient-to-br from-indigo-500/10 to-indigo-500/5">
-                                                    <Settings2 className="h-5 w-5 text-indigo-500" />
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-gradient-to-br from-red-500/10 to-red-500/5">
+                                                    <Settings2 className="h-5 w-5 text-red-500" />
                                                 </div>
                                                 <div>
                                                     <div className="flex items-center gap-2">
@@ -198,7 +198,7 @@ export default function LiveConfiguration({ configurations }: Props) {
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             {getScoringBadge(config.scoring_system)}
                                                             {config.allow_court_change && (
-                                                                <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-400">
+                                                                <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950/50 dark:text-gray-400">
                                                                     Allowed Change Court
                                                                 </Badge>
                                                             )}

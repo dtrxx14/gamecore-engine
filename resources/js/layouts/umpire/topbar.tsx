@@ -48,7 +48,7 @@ export default function UmpireTopbar({ children }: { children: ReactNode }) {
                         </Link>
                     </div>
 
-                    <nav className="hidden items-center gap-1 rounded-full border border-border/60 bg-background/70 p-1 shadow-sm md:flex">
+                    {/* <nav className="hidden items-center gap-1 rounded-full border border-border/60 bg-background/70 p-1 shadow-sm md:flex">
                         <Link
                             href="/umpire/dashboard"
                             className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
@@ -56,7 +56,7 @@ export default function UmpireTopbar({ children }: { children: ReactNode }) {
                             <Swords className="size-4" />
                             My Courts
                         </Link>
-                    </nav>
+                    </nav> */}
 
                     <div className="flex items-center gap-2">
                         <DropdownMenu>

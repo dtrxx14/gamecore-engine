@@ -1,8 +1,8 @@
 import { Head } from '@inertiajs/react';
 import { useEffect, useState, useRef, useCallback } from 'react';
+import AppLogoIcon from '@/components/app-logo-icon';
 import {
-    Trophy, Swords, Clock, Users, RefreshCw, Wifi, WifiOff,
-    Goal, Play, Pause, ChevronDown, ChevronRight, Minus,
+    Trophy, Swords, Clock, Users, RefreshCw, Wifi, WifiOff, Pause
 } from 'lucide-react';
 import echo from '@/echo';
 
@@ -372,7 +372,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
 
                 {isIdle ? (
                     <div className="relative flex flex-col items-center justify-center py-8 text-muted-foreground">
-                        <Goal className="h-8 w-8 mb-2 opacity-30" />
+                        <Swords className="mb-2 h-8 w-8 text-muted-foreground/30" />
                         <p className="text-xs font-medium">No Match Scheduled</p>
                     </div>
                 ) : (
@@ -521,8 +521,8 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                 <header className="sticky top-0 z-30 border-b border-primary/10 bg-background/95 backdrop-blur-md">
                     <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
                         <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/60 shadow-lg">
-                                <Trophy className="h-5 w-5 text-primary-foreground" />
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/60 shadow-lg">
+                                <AppLogoIcon className="size-5" />
                             </div>
                             <div>
                                 <h1 className="text-lg font-bold tracking-tight">Live Courts</h1>
@@ -571,7 +571,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                 <main className="mx-auto max-w-7xl px-4 py-6">
                     {!selectedConfig || selectedConfig.courts.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                            <Goal className="h-16 w-16 mb-4 opacity-20" />
+                            <Swords className="mb-2 h-8 w-8 text-muted-foreground/30" />
                             <p className="text-lg font-medium">No Active Courts</p>
                             <p className="text-sm">There are no active court configurations right now.</p>
                         </div>

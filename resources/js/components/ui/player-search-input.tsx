@@ -160,7 +160,7 @@ export default function PlayerSearchInput({
                                     onClick={() => addPlayer(player)}
                                     className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition hover:bg-muted"
                                 >
-                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-[10px] font-bold text-red-600 dark:text-red-400">
                                         {player.first_name.charAt(0).toUpperCase()}{player.last_name.charAt(0).toUpperCase()}
                                     </div>
                                     <div className="min-w-0 flex-1">

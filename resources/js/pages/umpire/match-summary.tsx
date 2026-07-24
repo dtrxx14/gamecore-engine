@@ -214,7 +214,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                     {/* Match Details */}
                     <div className="rounded-xl border border-border/60 bg-card/50 p-5">
                         <div className="flex items-center gap-2 mb-4">
-                            <ShieldHalf className="h-4 w-4 text-indigo-500" />
+                            <ShieldHalf className="h-4 w-4 text-red-500" />
                             <h3 className="text-sm font-semibold">Match Details</h3>
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm">
@@ -320,7 +320,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                     {/* Captain Signatures Section */}
                     <div className="rounded-xl border border-border/60 bg-card/50 p-5">
                         <div className="flex items-center gap-2 mb-4">
-                            <Pen className="h-4 w-4 text-indigo-500" />
+                            <Pen className="h-4 w-4 text-red-500" />
                             <h3 className="text-sm font-semibold">Captain Signatures</h3>
                             {isSignedMode && (
                                 <Badge variant="outline" className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400 ml-auto">
@@ -377,7 +377,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                             <button
                                 onClick={saveSignatures}
                                 disabled={!signaturesComplete || isSaving}
-                                className="mt-4 w-full rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 py-3 text-sm font-semibold text-white shadow-lg hover:from-indigo-500 hover:to-indigo-400 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                className="mt-4 w-full rounded-xl bg-gradient-to-r from-red-600 to-red-500 py-3 text-sm font-semibold text-white shadow-lg hover:from-red-500 hover:to-red-400 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {isSaving ? (
                                     <>Saving...</>
@@ -395,7 +395,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                     <div className="pt-2 pb-8">
                         <button
                             onClick={goToDashboard}
-                            className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 py-4 text-white font-semibold shadow-lg hover:from-indigo-500 hover:to-indigo-400 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            className="w-full rounded-xl bg-gradient-to-r from-red-600 to-red-500 py-4 text-white font-semibold shadow-lg hover:from-red-500 hover:to-red-400 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                         >
                             <ArrowLeft className="h-5 w-5" />
                             Back to Dashboard

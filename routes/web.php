@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\LiveConfigurationController;
+use App\Http\Controllers\Admin\PlayerImportController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\AdminOrganizerController;
 use App\Http\Controllers\Api\LocationController;
@@ -71,6 +72,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('admin/live-configuration/match-scores', [LiveConfigurationController::class, 'storeMatchScore'])->name('admin.live-configuration.match-scores.store');
         Route::put('admin/live-configuration/match-scores/{liveMatchScore}', [LiveConfigurationController::class, 'updateMatchScore'])->name('admin.live-configuration.match-scores.update');
         Route::delete('admin/live-configuration/match-scores/{liveMatchScore}', [LiveConfigurationController::class, 'destroyMatchScore'])->name('admin.live-configuration.match-scores.destroy');
+
+        // Player import routes
+        Route::get('admin/player-import', [PlayerImportController::class, 'create'])->name('admin.player-import.create');
+        Route::post('admin/player-import', [PlayerImportController::class, 'store'])->name('admin.player-import.store');
     });
 
     // Umpire routes
