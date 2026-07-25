@@ -453,7 +453,7 @@ $liveMatchScore->load([
     }
 
     /**
-     * Confirm player change - resets rally_count to 0.
+     * Confirm player change - resets rally_count to 0 and optionally swaps court sides.
      * After reset, a subsequent Undo (decrement) will set rally_count back to 9
      * since the last point was scored before the player change.
      */
@@ -463,13 +463,25 @@ $liveMatchScore->load([
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Reset rally_count to 0 since players were changed
-        // Undo will go back to 9 (see updateScore decrement logic)
-        $liveMatchScore->update([
-            'rally_count' => 0,
+        $validated = $request->validate([
+            'swap_courts' => 'sometimes|boolean',
+            'team_a_court' => 'required_with:swap_courts|in:left,right',
+            'team_b_court' => 'required_with:swap_courts|in:left,right',
         ]);
 
-$liveMatchScore->load([
+        $updateData = [
+            'rally_count' => 0,
+        ];
+
+        // If swapping court sides, update team_a_court and team_b_court
+        if (isset($validated['swap_courts']) && $validated['swap_courts']) {
+            $updateData['team_a_court'] = $validated['team_a_court'];
+            $updateData['team_b_court'] = $validated['team_b_court'];
+        }
+
+        $liveMatchScore->update($updateData);
+
+        $liveMatchScore->load([
             'liveConfiguration', 'liveConfiguration.status', 'category',
             'teamA', 'teamB', 'status',
         ]);

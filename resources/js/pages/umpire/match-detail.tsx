@@ -293,6 +293,14 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
                 setIsPaused(data.match.is_paused ?? false);
                 setServingTeam(data.match.serving_team ?? servingTeam);
 
+                // Update court sides from backend (important after player changes)
+                if (data.match.team_a_court) {
+                    setTeamACourt(data.match.team_a_court);
+                }
+                if (data.match.team_b_court) {
+                    setTeamBCourt(data.match.team_b_court);
+                }
+
                 // Update timer from server-calculated value (persists across sessions)
                 if (data.time_remaining !== null) {
                     setTimeRemaining(data.time_remaining);
@@ -479,11 +487,12 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
         } finally { setIsSubmitting(false); }
     };
 
-    // CHANGE PLAYERS - resets rally count to 0 on backend
+    // CHANGE PLAYERS - resets rally count to 0 on backend AND swaps court sides
     // Undo will go back to 9 (handled by backend decrement logic)
     const confirmPlayerChange = async () => {
         setIsSubmitting(true);
         try {
+            // Also swap court sides on the backend
             const response = await fetch(`${API_BASE}/${match.id}/change-players`, {
                 method: 'POST',
                 headers: {
@@ -492,11 +501,18 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
                 },
-                body: JSON.stringify({}),
+                body: JSON.stringify({
+                    swap_courts: true,
+                    team_a_court: teamBCourt,
+                    team_b_court: teamACourt,
+                }),
             });
             const data = await response.json();
             if (data.success) {
                 setRallyCount(0);
+                // Swap court sides in local state so the score display maps correctly
+                setTeamACourt(data.match.team_a_court ?? teamBCourt);
+                setTeamBCourt(data.match.team_b_court ?? teamACourt);
                 setShowPlayerChangeModal(false);
             }
         } catch (error) {
