@@ -557,7 +557,11 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                 body: JSON.stringify({}),
             });
             const data = await response.json();
-            if (data.success) { setLivePhase('finished'); setShowWinnerConfirmation(false); }
+            if (data.success) { 
+                setLivePhase('finished');
+                setShowWinnerConfirmation(false);
+                router.visit(`/umpire/match/${match.id}/summary`);
+            }
         } catch (error) {
             console.error('Failed to end match:', error);
         } finally { setIsSubmitting(false); }

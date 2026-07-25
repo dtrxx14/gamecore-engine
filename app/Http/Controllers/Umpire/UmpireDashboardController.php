@@ -691,7 +691,7 @@ $liveMatchScore->load([
             ];
         }
 
-broadcast(new StandingsUpdated($configuration, $standingsData));
+        broadcast(new StandingsUpdated($configuration, $standingsData));
     }
 
     /**
@@ -744,7 +744,7 @@ broadcast(new StandingsUpdated($configuration, $standingsData));
         $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
 
         $liveMatchScore->update([
-            'status_id' => $completedStatus->id ?? $liveMatchScore->status_id,
+            'status_id' => $completedStatus->id,
             'end_play_at' => now(),
             'is_paused' => false,
         ]);
