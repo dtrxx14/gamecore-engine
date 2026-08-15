@@ -10,12 +10,19 @@ use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\Organizer\OrganizationDashboardController;
 use App\Http\Controllers\Organizer\TournamentController;
 use App\Http\Controllers\Player\ProfileController as PlayerProfileController;
+use App\Http\Controllers\Public\ContactController;
 use App\Http\Controllers\Public\LiveCourtsController;
 use App\Http\Controllers\Public\StandingsController;
 use App\Http\Controllers\Umpire\UmpireDashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+
+// Public marketing pages (no auth required)
+Route::inertia('features', 'public/features')->name('features');
+Route::inertia('about', 'public/about')->name('about');
+Route::get('contact', [ContactController::class, 'create'])->name('contact');
+Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
 
 // Public standings routes (no auth required)
 Route::get('standings', [StandingsController::class, 'index'])->name('public.standings');
@@ -24,6 +31,12 @@ Route::get('api/standings', [StandingsController::class, 'api'])->name('api.stan
 // Public courts routes (no auth required)
 Route::get('courts', [LiveCourtsController::class, 'index'])->name('public.courts');
 Route::get('api/courts', [LiveCourtsController::class, 'api'])->name('api.courts');
+
+// Slug-based public pages for a specific live configuration
+Route::get('{slug}/standings', [StandingsController::class, 'show'])->name('public.standings.show');
+Route::get('api/{slug}/standings', [StandingsController::class, 'showApi'])->name('api.standings.show');
+Route::get('{slug}/courts', [LiveCourtsController::class, 'show'])->name('public.courts.show');
+Route::get('api/{slug}/courts', [LiveCourtsController::class, 'showApi'])->name('api.courts.show');
 
 // Public API routes
 Route::get('/api/countries', [LocationController::class, 'countries']);

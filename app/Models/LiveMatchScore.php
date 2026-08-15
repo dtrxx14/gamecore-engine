@@ -19,6 +19,8 @@ protected $fillable = [
         'team_a_court',
         'team_b_court',
         'serving_team',
+        'service_number',
+        'court_change_done',
         'next_team_a_id',
         'next_team_b_id',
         'status_id',
@@ -28,7 +30,7 @@ protected $fillable = [
         'is_paused',
         'paused_at',
         'paused_remaining',
-'team_a_signature',
+        'team_a_signature',
         'team_b_signature',
         'team_a_signed_by',
         'team_b_signed_by',
@@ -46,6 +48,8 @@ protected $fillable = [
         'is_paused' => 'boolean',
         'paused_at' => 'datetime',
         'paused_remaining' => 'integer',
+        'service_number' => 'integer',
+        'court_change_done' => 'boolean',
     ];
 
     public function liveConfiguration()

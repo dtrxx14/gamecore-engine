@@ -48,6 +48,7 @@ interface Court {
     team_a_court: 'left' | 'right' | null;
     team_b_court: 'left' | 'right' | null;
     serving_team: 'team_a' | 'team_b' | null;
+    service_number: number;
     rally_count: number;
     time_remaining: number | null;
     next_team_a: NextTeam | null;
@@ -73,30 +74,52 @@ interface Configuration {
 }
 
 interface Props {
-    configurations: { id: number; name: string; number_of_courts: number; scoring_system: string; pusher_channel: string }[];
-    courtsByConfig: Configuration[];
+    configurations?: { id: number; name: string; number_of_courts: number; scoring_system: string; pusher_channel: string }[];
+    courtsByConfig?: Configuration[];
+    configuration?: { id: number; name: string; slug?: string; number_of_courts: number; scoring_system: string; pusher_channel: string } | null;
+    courtsData?: Configuration | null;
 }
 
-export default function Courts({ configurations: initialConfigs, courtsByConfig: initialData }: Props) {
-    const [configs, setConfigs] = useState<Configuration[]>(initialData);
-    const [selectedConfigId, setSelectedConfigId] = useState<number | null>(null);
+export default function Courts({ configurations: initialConfigs, courtsByConfig: initialData, configuration: singleConfig, courtsData: singleData }: Props) {
+    // Single-config (slug) mode: use the passed configuration/courtsData directly.
+    const isSingleMode = !!singleConfig && !!singleData;
+    const [configs, setConfigs] = useState<Configuration[]>(isSingleMode ? [singleData!] : (initialData ?? []));
+    const [selectedConfigId, setSelectedConfigId] = useState<number | null>(isSingleMode ? singleData!.configuration_id : null);
     const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'polling'>('connected');
     const [timeDisplay, setTimeDisplay] = useState<Record<string, number>>({});
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const slug = singleConfig?.slug;
 
-    // Auto-select first configuration
+    // Auto-select first configuration (multi-config mode only)
     useEffect(() => {
         if (configs.length > 0 && !selectedConfigId) {
             setSelectedConfigId(configs[0].configuration_id);
         }
     }, [configs, selectedConfigId]);
 
-    // Live countdown timer for time_remaining
+    // Live countdown timer for time_remaining.
+    // Only decrements timers for courts that are actively playing.
+    // When a court is paused (is_paused / phase 'paused'), its timer stays frozen
+    // so it stays in sync with the umpire's pause state.
     useEffect(() => {
+        const pausedKeys = new Set<string>();
+        for (const config of configs) {
+            for (const court of config.courts) {
+                if (court.is_paused || court.phase === 'paused') {
+                    pausedKeys.add(`${config.configuration_id}-${court.court_number}`);
+                }
+            }
+        }
+
         const interval = setInterval(() => {
             setTimeDisplay((prev) => {
                 const updated: Record<string, number> = {};
                 for (const [key, value] of Object.entries(prev)) {
+                    if (pausedKeys.has(key)) {
+                        // Keep the paused timer frozen (do not decrement).
+                        updated[key] = value;
+                        continue;
+                    }
                     if (value > 0) {
                         updated[key] = value - 1;
                     }
@@ -105,7 +128,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
             });
         }, 1000);
         return () => clearInterval(interval);
-    }, []);
+    }, [configs]);
 
     // Eagerly sync time_remaining from server data into timeDisplay
     useEffect(() => {
@@ -152,9 +175,18 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
             const channelName = `courts.${config.configuration_id}`;
             const channel = echo.channel(channelName);
 
-            channel.listen('.match.score.updated', (e: any) => {
+                channel.listen('.match.score.updated', (e: any) => {
                 setConnectionStatus('connected');
                 if (e.match) {
+                    // When a match is completed (end_play_at set), the umpire may have
+                    // auto-advanced a next match onto this court (a new LiveMatchScore record).
+                    // Re-fetch full courts data so the court shows the new match (or becomes idle)
+                    // instead of a stale "finished" state.
+                    if (e.match.end_play_at) {
+                        fetchData();
+                        return;
+                    }
+
                     setConfigs((prev) => {
                         return prev.map((cfg) => {
                             if (cfg.configuration_id !== e.configuration_id && cfg.configuration_id !== e.match.live_configuration_id) {
@@ -185,6 +217,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                                     team_a_score: e.match.team_a_score ?? 0,
                                     team_b_score: e.match.team_b_score ?? 0,
                                     serving_team: e.match.serving_team ?? null,
+                                    service_number: e.match.service_number ?? 1,
                                     rally_count: e.match.rally_count ?? 0,
                                     team_a_court: e.match.team_a_court ?? null,
                                     team_b_court: e.match.team_b_court ?? null,
@@ -228,18 +261,24 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
     // Polling fallback
     const fetchData = useCallback(async () => {
         try {
-            const response = await fetch('/api/courts', {
+            const url = slug ? `/api/${slug}/courts` : '/api/courts';
+            const response = await fetch(url, {
                 headers: { 'Accept': 'application/json' },
             });
             const json = await response.json();
             if (json.success) {
-                setConfigs(json.data);
+                if (slug) {
+                    // Single-config mode: replace the single entry with the fresh data.
+                    setConfigs([json.data]);
+                } else {
+                    setConfigs(json.data);
+                }
                 setConnectionStatus((prev) => (prev === 'disconnected' ? 'polling' : prev));
             }
         } catch {
             setConnectionStatus('disconnected');
         }
-    }, []);
+    }, [slug]);
 
     useEffect(() => {
         if (connectionStatus === 'polling' || connectionStatus === 'disconnected') {
@@ -287,7 +326,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
         );
     };
 
-    const renderCourtCard = (court: Court, configId: number) => {
+        const renderCourtCard = (court: Court, configId: number, scoringSystem: string) => {
         const timeKey = `${configId}-${court.court_number}`;
         const displayTime = timeDisplay[timeKey] ?? court.time_remaining;
 
@@ -295,10 +334,31 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
         const isFinished = court.phase === 'finished';
         const isIdle = court.phase === 'idle';
         const isSetup = court.phase === 'setup';
+        const isSideOut = scoringSystem === 'side-out';
 
-        const getTeamInitials = (name: string) => {
+const getTeamInitials = (name: string) => {
             return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
         };
+
+        // For side-out scoring with exactly 2 players in a team, we show the players
+        // (avatar + full name) instead of the team initials + team name.
+        const isSideOutDoubles =
+            isSideOut &&
+            court.team_a?.players?.length === 2 &&
+            court.team_b?.players?.length === 2;
+
+        const renderPlayerRow = (player: Player) => (
+            <div key={player.id} className="flex items-center gap-1.5 min-w-0">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-gradient-to-br from-primary/30 to-primary/10 text-[8px] font-bold text-primary">
+                    {player.first_name && player.last_name
+                        ? `${player.first_name[0]}${player.last_name[0]}`
+                        : '??'}
+                </div>
+                <span className="text-xs font-medium truncate text-foreground">
+                    {player.first_name} {player.last_name}
+                </span>
+            </div>
+        );
 
         const servingTeamName = court.serving_team === 'team_a'
             ? court.team_a?.name
@@ -377,7 +437,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                     </div>
                 ) : (
                     <div className="relative p-3 space-y-3">
-                        {/* Team A */}
+{/* Team A */}
                         <div className={`relative rounded-xl p-3 transition-all ${
                             court.serving_team === 'team_a'
                                 ? 'bg-primary/15 ring-1 ring-primary/30'
@@ -385,29 +445,47 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                         }`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
-                                        court.serving_team === 'team_a' ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
-                                    }`}>
-                                        {court.team_a ? getTeamInitials(court.team_a.name) : 'A'}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold truncate">{court.team_a?.name ?? 'Team A'}</p>
-                                        {court.team_a?.players && court.team_a.players.length > 0 && (
-                                            <div className="mt-1">{renderPlayerAvatars(court.team_a.players)}</div>
-                                        )}
-                                    </div>
+                                    {isSideOutDoubles ? (
+                                        // Side-out doubles: show player rows (avatar + full name) instead of team initials/name
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex flex-col gap-1">
+                                                {court.team_a?.players?.map(renderPlayerRow)}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
+                                                court.serving_team === 'team_a' ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
+                                            }`}>
+                                                {court.team_a ? getTeamInitials(court.team_a.name) : 'A'}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold truncate">{court.team_a?.name ?? 'Team A'}</p>
+                                                {court.team_a?.players && court.team_a.players.length > 0 && (
+                                                    <div className="mt-1">{renderPlayerAvatars(court.team_a.players)}</div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {court.serving_team === 'team_a' && (
+                                    {court.serving_team === 'team_a' && isSideOut && (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                            <div className="flex gap-1">
+                                                <span className="h-3 w-3 rounded-full bg-red-500 dark:bg-white" />
+                                                <span className={`h-3 w-3 rounded-full ${court.service_number >= 2 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                                            </div>
+                                            {/* <span className="text-[8px] font-bold uppercase tracking-wide text-red-500 dark:text-white">Serve</span> */}
+                                        </div>
+                                    )}
+                                    {court.serving_team === 'team_a' && !isSideOut && (
                                         <span className="flex h-5 items-center gap-1 rounded bg-primary/20 px-1.5 text-[8px] font-bold text-primary uppercase">
                                             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse ring-1 ring-primary/50" />
                                             Serve
                                         </span>
                                     )}
                                     <span className={`font-black tabular-nums text-4xl drop-shadow-sm ${
-                                        court.team_a_score > court.team_b_score && isFinished
-                                            ? 'text-green-500'
-                                            : 'text-foreground'
+                                        court.team_a_score > court.team_b_score && isFinished ? 'text-green-500' : 'text-foreground'
                                     }`}>
                                         {court.team_a_score}
                                     </span>
@@ -434,20 +512,40 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                         }`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
-                                        court.serving_team === 'team_b' ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
-                                    }`}>
-                                        {court.team_b ? getTeamInitials(court.team_b.name) : 'B'}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold truncate">{court.team_b?.name ?? 'Team B'}</p>
-                                        {court.team_b?.players && court.team_b.players.length > 0 && (
-                                            <div className="mt-1">{renderPlayerAvatars(court.team_b.players)}</div>
-                                        )}
-                                    </div>
+                                    {isSideOutDoubles ? (
+                                        // Side-out doubles: show player rows (avatar + full name) instead of team initials/name
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex flex-col gap-1">
+                                                {court.team_b?.players?.map(renderPlayerRow)}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
+                                                court.serving_team === 'team_b' ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
+                                            }`}>
+                                                {court.team_b ? getTeamInitials(court.team_b.name) : 'B'}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold truncate">{court.team_b?.name ?? 'Team B'}</p>
+                                                {court.team_b?.players && court.team_b.players.length > 0 && (
+                                                    <div className="mt-1">{renderPlayerAvatars(court.team_b.players)}</div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {court.serving_team === 'team_b' && (
+                                    {court.serving_team === 'team_b' && isSideOut && (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                            <div className="flex gap-1">
+                                                <span className="h-3 w-3 rounded-full bg-red-500 dark:bg-white" />
+                                                <span className={`h-3 w-3 rounded-full ${court.service_number >= 2 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                                            </div>
+                                            {/* <span className="text-[8px] font-bold uppercase tracking-wide text-red-500 dark:text-white">Serve</span> */}
+                                        </div>
+                                    )}
+                                    {court.serving_team === 'team_b' && !isSideOut && (
                                         <span className="flex h-5 items-center gap-1 rounded bg-primary/20 px-1.5 text-[8px] font-bold text-primary uppercase">
                                             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse ring-1 ring-primary/50" />
                                             Serve
@@ -468,10 +566,12 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                         {(isLive || isSetup) && (
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-1">
-                                        <Swords className="h-3 w-3" />
-                                        <span>{court.rally_count} rallies</span>
-                                    </div>
+                                    {!isSideOut && (
+                                        <div className="flex items-center gap-1">
+                                            <Swords className="h-3 w-3" />
+                                            <span>{court.rally_count} rallies</span>
+                                        </div>
+                                    )}
                                     {displayTime !== null && isLive && (
                                         <div className="flex items-center gap-1">
                                             <Clock className="h-3 w-3" />
@@ -599,7 +699,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
 
                             {/* Courts grid */}
                             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                                {selectedConfig.courts.map((court) => renderCourtCard(court, selectedConfig.configuration_id))}
+                                {selectedConfig.courts.map((court) => renderCourtCard(court, selectedConfig.configuration_id, selectedConfig.scoring_system))}
                             </div>
 
                             {/* Recent Results */}

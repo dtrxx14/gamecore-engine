@@ -126,7 +126,7 @@
     --chart-3: oklch(0.76 0.18 18);
     --chart-4: oklch(0.66 0.2 22);
     --chart-5: oklch(0.74 0.17 26);
-    --sidebar: linear-gradient(180deg, oklch(0.16 0.04 19), oklch(0.12 0.03 18));
+--sidebar: oklch(0.16 0.04 19);
     --sidebar-foreground: oklch(0.98 0.01 24);
     --sidebar-primary: oklch(0.72 0.21 24);
     --sidebar-primary-foreground: oklch(0.98 0.01 24);
@@ -134,6 +134,24 @@
     --sidebar-accent-foreground: oklch(0.97 0.01 24);
     --sidebar-border: oklch(0.29 0.06 18);
     --sidebar-ring: oklch(0.72 0.18 24);
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slide-in {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(0);
+    }
 }
 
 @layer base {

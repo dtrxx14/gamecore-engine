@@ -152,11 +152,23 @@ export default function UmpireDashboard({ groupedAssignments }: Props) {
                                                 </div>
                                                 <div>
                                                     <div className="text-sm font-semibold text-foreground">Court {match.court_number}</div>
-                                                    {match.category && (
-                                                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0">
-                                                            {match.category.name}
-                                                        </Badge>
-                                                    )}
+                                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                                        {match.category && (
+                                                            <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0">
+                                                                {match.category.name}
+                                                            </Badge>
+                                                        )}
+                                                        {match.category?.game_time ? (
+                                                            <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-400 text-[10px] px-1.5 py-0">
+                                                                <Clock className="mr-0.5 h-2.5 w-2.5" />
+                                                                {match.category.game_time} mins
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                                                                No time limit
+                                                            </Badge>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-1">

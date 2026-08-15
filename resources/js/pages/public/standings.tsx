@@ -31,17 +31,31 @@ interface StandingsConfiguration {
 }
 
 interface StandingsPageProps {
-    configurations: {
+    configurations?: {
         id: number;
         name: string;
         scoring_system: string;
         pusher_channel: string;
     }[];
-    standingsByConfig: StandingsConfiguration[];
+    standingsByConfig?: StandingsConfiguration[];
+    configuration?: {
+        id: number;
+        name: string;
+        slug?: string;
+        scoring_system: string;
+        pusher_channel: string;
+    } | null;
+    standingsData?: StandingsConfiguration | null;
 }
 
-export default function Standings({ configurations, standingsByConfig: initialData }: StandingsPageProps) {
-    const [standingsByConfig, setStandingsByConfig] = useState<StandingsConfiguration[]>(initialData);
+export default function Standings({ configurations, standingsByConfig: initialData, configuration: singleConfig, standingsData: singleData }: StandingsPageProps) {
+    // Single-config (slug) mode: use the passed configuration/standingsData directly.
+    const isSingleMode = !!singleConfig && !!singleData;
+    const effectiveConfigs = isSingleMode
+        ? [{ id: singleConfig.id, name: singleConfig.name, scoring_system: singleConfig.scoring_system, pusher_channel: singleConfig.pusher_channel }]
+        : (configurations ?? []);
+    const [standingsByConfig, setStandingsByConfig] = useState<StandingsConfiguration[]>(isSingleMode ? [singleData!] : (initialData ?? []));
+    const slug = singleConfig?.slug;
     const [expandedConfigs, setExpandedConfigs] = useState<Record<number, boolean>>({});
     const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
     const [isPolling, setIsPolling] = useState(false);
@@ -102,8 +116,8 @@ export default function Standings({ configurations, standingsByConfig: initialDa
                 const echo = echoModule.default;
                 echoRef.current = echo;
 
-                // Subscribe to each active configuration
-                configurations.forEach(config => {
+// Subscribe to each active configuration
+                effectiveConfigs.forEach(config => {
                     const channelName = `standings.${config.id}`;
                     console.log(`[Standings] Subscribing to channel: ${channelName}`);
 
@@ -126,10 +140,10 @@ export default function Standings({ configurations, standingsByConfig: initialDa
 
         initEcho();
 
-        return () => {
+return () => {
             isSubscribed = false;
             if (echoRef.current) {
-                configurations.forEach(config => {
+                effectiveConfigs.forEach(config => {
                     try {
                         echoRef.current.leave(`standings.${config.id}`);
                     } catch (e) {
@@ -141,7 +155,7 @@ export default function Standings({ configurations, standingsByConfig: initialDa
                 clearInterval(pollingIntervalRef.current);
             }
         };
-    }, [configurations]);
+    }, [configurations, effectiveConfigs]);
 
     const handleStandingsUpdate = (configId: number, event: any) => {
         // The event structure from StandingsUpdated event sends:
@@ -173,16 +187,22 @@ export default function Standings({ configurations, standingsByConfig: initialDa
         setLastUpdated(new Date());
     };
 
-    const startPolling = () => {
+const startPolling = () => {
         if (pollingIntervalRef.current) return;
         setIsPolling(true);
 
         pollingIntervalRef.current = setInterval(async () => {
             try {
-                const response = await fetch('/api/standings');
+                const url = slug ? `/api/${slug}/standings` : '/api/standings';
+                const response = await fetch(url);
                 const json = await response.json();
                 if (json.success && json.data) {
-                    setStandingsByConfig(json.data);
+                    if (slug) {
+                        // Single-config mode: replace the single entry with fresh data.
+                        setStandingsByConfig([json.data]);
+                    } else {
+                        setStandingsByConfig(json.data);
+                    }
                     setLastUpdated(new Date());
                 }
             } catch (err) {

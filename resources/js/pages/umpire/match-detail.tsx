@@ -40,6 +40,7 @@ interface LiveConfiguration {
     number_of_courts: number;
     scoring_system: string;
     allow_court_change: boolean;
+    court_change_trigger: string;
     court_change_interval: number | null;
     status: Status | null;
 }
@@ -57,6 +58,8 @@ interface LiveMatchScore {
     team_a_court: 'left' | 'right' | null;
     team_b_court: 'left' | 'right' | null;
     serving_team: 'team_a' | 'team_b' | null;
+    service_number?: number;
+    court_change_done?: boolean;
     status_id: number;
     start_play_at: string | null;
     end_play_at: string | null;
@@ -84,7 +87,7 @@ type CoinTossPhase =
     | 'result'
     | 'choose_winner'
     | 'choose_option'
-    | 'choose_serve'
+| 'choose_serve'
     | 'choose_court'
     | 'complete';
 
@@ -104,10 +107,13 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
     const [teamBVerified, setTeamBVerified] = useState(initialPhase !== 'setup');
     const [teamAPlayersOpen, setTeamAPlayersOpen] = useState(false);
     const [teamBPlayersOpen, setTeamBPlayersOpen] = useState(false);
+    // Per-player verification state (used for side-out doubles - 2 player teams)
+    const [teamAPlayersVerified, setTeamAPlayersVerified] = useState<Record<number, boolean>>({});
+    const [teamBPlayersVerified, setTeamBPlayersVerified] = useState<Record<number, boolean>>({});
     const [bothTeamsPresent, setBothTeamsPresent] = useState(initialPhase !== 'setup');
     const [defaultTimerActive, setDefaultTimerActive] = useState(false);
     const [defaultTimerExpired, setDefaultTimerExpired] = useState(false);
-    const [defaultTimerSeconds, setDefaultTimerSeconds] = useState(300);
+    const [defaultTimerSeconds, setDefaultTimerSeconds] = useState(3);
     const [setupComplete, setSetupComplete] = useState(initialSetupComplete);
 
     // Coin toss state - if data already exists, skip to complete phase
@@ -142,6 +148,14 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
     const [showWinnerConfirmation, setShowWinnerConfirmation] = useState(false);
     const [scoringTeam, setScoringTeam] = useState<'team_a' | 'team_b' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Side-out scoring state (standard pickleball side-out rules)
+    const isSideOut = match.live_configuration?.scoring_system === 'side-out';
+    // serviceNumber: which server within the serving team is serving (1 or 2).
+    // The game starts at 0-0-2 → the initial serving team begins on their 2nd server.
+    const [serviceNumber, setServiceNumber] = useState<1 | 2>(isSideOut ? 2 : 1);
+    // courtChangeDone: for side-out, the court change (change sides) is only allowed ONCE per match.
+    const [courtChangeDone, setCourtChangeDone] = useState(false);
 
     const { resolvedAppearance } = useAppearance();
 
@@ -196,8 +210,32 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
         return `Team #${teamId}`;
     };
 
-    const teamAName = getTeamName(match.team_a, match.team_a_id);
+const teamAName = getTeamName(match.team_a, match.team_a_id);
     const teamBName = getTeamName(match.team_b, match.team_b_id);
+
+    // Side-out doubles: verify each player individually (when a team has exactly 2 players)
+    const teamAPlayers = match.team_a?.players ?? [];
+    const teamBPlayers = match.team_b?.players ?? [];
+    const usePlayerVerifyA = isSideOut && teamAPlayers.length === 2;
+    const usePlayerVerifyB = isSideOut && teamBPlayers.length === 2;
+
+    // A team is "ready" when all of its players are verified (in player-verify mode)
+    // or when the whole team was verified via the single toggle (otherwise).
+    const teamAReady = usePlayerVerifyA
+        ? teamAPlayers.length > 0 && teamAPlayers.every((p) => teamAPlayersVerified[p.id])
+        : teamAVerified;
+    const teamBReady = usePlayerVerifyB
+        ? teamBPlayers.length > 0 && teamBPlayers.every((p) => teamBPlayersVerified[p.id])
+        : teamBVerified;
+
+    const toggleTeamAPlayerVerified = (playerId: number) => {
+        if (bothTeamsPresent) return;
+        setTeamAPlayersVerified((prev) => ({ ...prev, [playerId]: !prev[playerId] }));
+    };
+    const toggleTeamBPlayerVerified = (playerId: number) => {
+        if (bothTeamsPresent) return;
+        setTeamBPlayersVerified((prev) => ({ ...prev, [playerId]: !prev[playerId] }));
+    };
 
     // Initialize game_time from category
     useEffect(() => {
@@ -293,6 +331,14 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
                 setIsPaused(data.match.is_paused ?? false);
                 setServingTeam(data.match.serving_team ?? servingTeam);
 
+                // Sync side-out scoring state from backend (service number + court change)
+                if (data.match.service_number) {
+                    setServiceNumber(data.match.service_number === 2 ? 2 : 1);
+                }
+                if (typeof data.match.court_change_done === 'boolean') {
+                    setCourtChangeDone(data.match.court_change_done);
+                }
+
                 // Update court sides from backend (important after player changes)
                 if (data.match.team_a_court) {
                     setTeamACourt(data.match.team_a_court);
@@ -360,7 +406,7 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
         setCoinPhase('choose_option');
     };
 
-const handleChoiceSelect = (choice: 'service' | 'court') => {
+    const handleChoiceSelect = (choice: 'service' | 'court') => {
         setCoinTossChoice(choice);
         if (choice === 'service') {
             // Toss winner chose service → toss winner serves, other team chooses court
@@ -448,6 +494,10 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                 setScores({ team_a: data.match.team_a_score ?? 0, team_b: data.match.team_b_score ?? 0 });
                 setRallyCount(data.match.rally_count ?? 0);
                 setServingTeam(data.match.serving_team ?? servingTeam);
+                // Sync side-out service number immediately after a score update
+                if (data.match.service_number) {
+                    setServiceNumber(data.match.service_number === 2 ? 2 : 1);
+                }
                 setScoringTeam(team);
                 setTimeout(() => setScoringTeam(null), 1000);
 
@@ -487,12 +537,22 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
         } finally { setIsSubmitting(false); }
     };
 
-    // CHANGE PLAYERS - resets rally count to 0 on backend AND swaps court sides
+    // CHANGE PLAYERS - resets rally count to 0 on backend
+    // Only swaps court sides when trigger is 'score-count' (not 'rally-count')
     // Undo will go back to 9 (handled by backend decrement logic)
     const confirmPlayerChange = async () => {
         setIsSubmitting(true);
         try {
-            // Also swap court sides on the backend
+            const courtChangeTrigger = match.live_configuration?.court_change_trigger;
+            const shouldSwapCourts = courtChangeTrigger === 'score-count';
+
+            const body: Record<string, any> = {};
+            if (shouldSwapCourts) {
+                body.swap_courts = true;
+                body.team_a_court = teamBCourt;
+                body.team_b_court = teamACourt;
+            }
+
             const response = await fetch(`${API_BASE}/${match.id}/change-players`, {
                 method: 'POST',
                 headers: {
@@ -501,18 +561,16 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
                 },
-                body: JSON.stringify({
-                    swap_courts: true,
-                    team_a_court: teamBCourt,
-                    team_b_court: teamACourt,
-                }),
+                body: JSON.stringify(body),
             });
             const data = await response.json();
             if (data.success) {
                 setRallyCount(0);
-                // Swap court sides in local state so the score display maps correctly
-                setTeamACourt(data.match.team_a_court ?? teamBCourt);
-                setTeamBCourt(data.match.team_b_court ?? teamACourt);
+                if (shouldSwapCourts) {
+                    // Swap court sides in local state so the score display maps correctly
+                    setTeamACourt(data.match.team_a_court ?? teamBCourt);
+                    setTeamBCourt(data.match.team_b_court ?? teamACourt);
+                }
                 setShowPlayerChangeModal(false);
             }
         } catch (error) {
@@ -672,7 +730,7 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                             <span className="text-[8px] font-bold uppercase tracking-wider text-primary/80">Serve</span>
                         </div>
                     )}
-                    <div className="px-3 pt-4 pb-2 sm:px-4 sm:pt-5 sm:pb-3 text-center flex items-center flex-col justify-center min-h-0">
+                    <div className="px-3 pt-4 pb-2 sm:px-4 sm:pt-5 sm:pb-3 text-center flex items-center flex-col justify-center w-full h-full">
                         <p className={`text-[10px] sm:text-xs font-bold truncate max-w-full mb-0.5 tracking-wide ${resolvedAppearance === 'dark' ? 'text-white/90' : 'text-foreground/90'}`}>
                             {teamName}
                         </p>
@@ -682,14 +740,14 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                             {teamScores}
                         </div>
                         {livePhase === 'playing' && (
-                            <div className="w-full mt-2 grid grid-cols-2 gap-1 opacity-80 hover:opacity-100 transition-opacity">
+                            <div className="w-full mt-3 grid grid-cols-2 gap-2 opacity-90 hover:opacity-100 transition-opacity">
                                 <button onClick={() => updateScore(team as 'team_a' | 'team_b', 'increment')} disabled={isSubmitting}
-                                    className="flex items-center justify-center gap-1 rounded-lg bg-primary/20 py-3 text-primary hover:bg-primary/30 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold backdrop-blur-sm">
-                                    <Plus className="h-3 w-3" />
+                                    className="flex items-center justify-center gap-1 rounded-xl bg-primary/20 py-4 text-primary hover:bg-primary/30 active:scale-95 transition-all disabled:opacity-40 font-black backdrop-blur-sm">
+                                    <Plus className="h-6 w-6 sm:h-7 sm:w-7" />
                                 </button>
                                 <button onClick={() => updateScore(team as 'team_a' | 'team_b', 'decrement')} disabled={isSubmitting || teamScores <= 0}
-                                    className="flex items-center justify-center gap-1 rounded-lg bg-destructive/20 py-3 text-destructive hover:bg-destructive/30 active:scale-95 transition-all disabled:opacity-40 text-xs font-bold backdrop-blur-sm">
-                                    <Minus className="h-3 w-3" />
+                                    className="flex items-center justify-center gap-1 rounded-xl bg-destructive/20 py-4 text-destructive hover:bg-destructive/30 active:scale-95 transition-all disabled:opacity-40 font-black backdrop-blur-sm">
+                                    <Minus className="h-6 w-6 sm:h-7 sm:w-7" />
                                 </button>
                             </div>
                         )}
@@ -778,7 +836,7 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                             <div className="relative px-3 py-1.5 sm:py-2 flex items-center justify-center gap-3">
                                 {/* Game to badge */}
                                 <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider ring-1 ${resolvedAppearance === 'dark' ? 'bg-white/5 text-white/50 ring-white/10' : 'bg-primary/5 text-primary/60 ring-primary/10'}`}>
-                                    Game to {match.category?.game_to ?? 21}
+                                    Game to {match.category?.game_to}
                                 </span>
 
                                 {/* Timer */}
@@ -801,10 +859,19 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                     </div>
                                 )} */}
 
-                                {/* Rally counter */}
-                                <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider ring-1 ${resolvedAppearance === 'dark' ? 'bg-white/5 text-white/50 ring-white/10' : 'bg-primary/5 text-primary/60 ring-primary/10'}`}>
-                                    <span className={rallyCount > 0 ? 'text-primary/80 font-bold' : ''}>{rallyCount}</span> rally
-                                </span>
+                                {/* Rally counter - only shown for non-side-out (rally point) scoring */}
+                                {!isSideOut && (
+                                    <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider ring-1 ${resolvedAppearance === 'dark' ? 'bg-white/5 text-white/50 ring-white/10' : 'bg-primary/5 text-primary/60 ring-primary/10'}`}>
+                                        <span className={rallyCount > 0 ? 'text-primary/80 font-bold' : ''}>{rallyCount}</span> rally
+                                    </span>
+                                )}
+                                {/* Service number badge - only shown for side-out scoring */}
+                                {isSideOut && (
+                                    <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider ring-1 ${resolvedAppearance === 'dark' ? 'bg-white/5 text-white/50 ring-white/10' : 'bg-primary/5 text-primary/60 ring-primary/10'}`}>
+                                        
+                                        <span className='text-primary/80 font-bold'>Serve {serviceNumber}</span>
+                                    </span>
+                                )}
                                 {/* <div className={`flex items-center gap-1 text-[9px] font-medium ${resolvedAppearance === 'dark' ? 'text-white/40' : 'text-muted-foreground'}`}>
                                     <RotateCw className={`h-2.5 w-2.5 ${rallyCount > 0 ? 'text-primary/80' : ''}`} />
                                     <span className={rallyCount > 0 ? 'text-primary/80 font-bold' : ''}>{rallyCount}</span>
@@ -869,7 +936,10 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                 </div>
                                 <div className="flex flex-col items-center gap-1">
                                     <span className="text-xs font-bold text-primary/50">VS</span>
-                                    {match.category?.game_time && <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1"><Clock className="h-3 w-3 text-primary/50" />{match.category.game_time} mins</span>}
+                                {match.category?.game_time
+                                    ? <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1"><Clock className="h-3 w-3 text-primary/50" />{match.category.game_time} mins</span>
+                                    : <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1"><Clock className="h-3 w-3 text-muted-foreground/40" /> - - </span>
+                                }
                                 </div>
                                 <div className="flex-1 flex flex-col items-center rounded-lg bg-primary/5 p-3 border border-primary/10">
                                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary mb-1">B</div>
@@ -900,9 +970,16 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">A</div>
                                                 <div className="min-w-0"><p className="text-sm font-medium truncate">{teamAName}</p><p className="text-[10px] text-muted-foreground">{match.team_a?.players?.length ?? match.team_a?.player_ids?.length ?? 0} player(s)</p></div>
                                             </button>
-                                            <button onClick={() => { if (!bothTeamsPresent) setTeamAVerified(!teamAVerified); }} disabled={bothTeamsPresent} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${teamAVerified ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                                                {teamAVerified ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                                            </button>
+                                            {!usePlayerVerifyA ? (
+                                                <button onClick={() => { if (!bothTeamsPresent) setTeamAVerified(!teamAVerified); }} disabled={bothTeamsPresent} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${teamAVerified ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                                                    {teamAVerified ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                                                </button>
+                                            ) : (
+                                                <span className={`flex h-8 items-center justify-center gap-1 rounded-full px-3 text-[10px] font-bold shrink-0 ml-2 transition-all ${teamAReady ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground'}`}>
+                                                    {teamAReady ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                                    {teamAReady ? 'Verified' : `${(teamAPlayers.filter((p) => teamAPlayersVerified[p.id]).length)}/${teamAPlayers.length}`}
+                                                </span>
+                                            )}
                                         </div>
                                         {teamAPlayersOpen && (
                                             <div className="border-t border-primary/10 px-3 py-2 space-y-2">
@@ -915,12 +992,21 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                                                     {player.first_name?.[0]}{player.last_name?.[0]}
                                                                 </AvatarFallback>
                                                             </Avatar>
-                                                            <div className="min-w-0">
+                                                            <div className="min-w-0 flex-1">
                                                                 <p className="text-xs font-medium truncate text-foreground">
                                                                     {player.first_name} {player.last_name}
                                                                 </p>
                                                                 <p className="text-[10px] text-muted-foreground truncate">{player.email}</p>
                                                             </div>
+                                                            {usePlayerVerifyA ? (
+                                                                <button onClick={() => toggleTeamAPlayerVerified(player.id)} disabled={bothTeamsPresent} className={`flex h-7 w-7 items-center justify-center rounded-full transition-all shrink-0 ml-1 ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''} ${teamAPlayersVerified[player.id] ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'}`}>
+                                                                    {teamAPlayersVerified[player.id] ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                                                </button>
+                                                            ) : (
+                                                                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold shrink-0 ml-1 ${teamAVerified ? 'bg-primary/20 text-primary' : 'bg-muted/30 text-muted-foreground'}`}>
+                                                                    {teamAVerified ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     ))
                                                 ) : (
@@ -938,9 +1024,16 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">B</div>
                                                 <div className="min-w-0"><p className="text-sm font-medium truncate">{teamBName}</p><p className="text-[10px] text-muted-foreground">{match.team_b?.players?.length ?? match.team_b?.player_ids?.length ?? 0} player(s)</p></div>
                                             </button>
-                                            <button onClick={() => { if (!bothTeamsPresent) setTeamBVerified(!teamBVerified); }} disabled={bothTeamsPresent} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${teamBVerified ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                                                {teamBVerified ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                                            </button>
+                                            {!usePlayerVerifyB ? (
+                                                <button onClick={() => { if (!bothTeamsPresent) setTeamBVerified(!teamBVerified); }} disabled={bothTeamsPresent} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${teamBVerified ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                                                    {teamBVerified ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                                                </button>
+                                            ) : (
+                                                <span className={`flex h-8 items-center justify-center gap-1 rounded-full px-3 text-[10px] font-bold shrink-0 ml-2 transition-all ${teamBReady ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground'}`}>
+                                                    {teamBReady ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                                    {teamBReady ? 'Verified' : `${(teamBPlayers.filter((p) => teamBPlayersVerified[p.id]).length)}/${teamBPlayers.length}`}
+                                                </span>
+                                            )}
                                         </div>
                                         {teamBPlayersOpen && (
                                             <div className="border-t border-primary/10 px-3 py-2 space-y-2">
@@ -953,12 +1046,21 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                                                     {player.first_name?.[0]}{player.last_name?.[0]}
                                                                 </AvatarFallback>
                                                             </Avatar>
-                                                            <div className="min-w-0">
+                                                            <div className="min-w-0 flex-1">
                                                                 <p className="text-xs font-medium truncate text-foreground">
                                                                     {player.first_name} {player.last_name}
                                                                 </p>
                                                                 <p className="text-[10px] text-muted-foreground truncate">{player.email}</p>
                                                             </div>
+                                                            {usePlayerVerifyB ? (
+                                                                <button onClick={() => toggleTeamBPlayerVerified(player.id)} disabled={bothTeamsPresent} className={`flex h-7 w-7 items-center justify-center rounded-full transition-all shrink-0 ml-1 ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''} ${teamBPlayersVerified[player.id] ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'}`}>
+                                                                    {teamBPlayersVerified[player.id] ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                                                </button>
+                                                            ) : (
+                                                                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold shrink-0 ml-1 ${teamBVerified ? 'bg-primary/20 text-primary' : 'bg-muted/30 text-muted-foreground'}`}>
+                                                                    {teamBVerified ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     ))
                                                 ) : (
@@ -974,12 +1076,12 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                     <h3 className="text-sm font-medium flex items-center gap-2"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">2</span>Confirm Presence</h3>
                                     <div className="flex items-center justify-between rounded-lg border border-primary/10 p-3 bg-background/50">
                                         <div className="flex items-center gap-2"><Users className="h-4 w-4 text-muted-foreground" /><span className="text-sm">Both teams present?</span></div>
-                                        <button onClick={() => { if (!bothTeamsPresent && teamAVerified && teamBVerified) { setBothTeamsPresent(true); setDefaultTimerActive(false); setDefaultTimerExpired(false); if (timerRef.current) clearInterval(timerRef.current); } }} disabled={bothTeamsPresent || !teamAVerified || !teamBVerified} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${bothTeamsPresent ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent || !teamAVerified || !teamBVerified ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                                        <button onClick={() => { if (!bothTeamsPresent && teamAReady && teamBReady) { setBothTeamsPresent(true); setDefaultTimerActive(false); setDefaultTimerExpired(false); if (timerRef.current) clearInterval(timerRef.current); } }} disabled={bothTeamsPresent || !teamAReady || !teamBReady} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${bothTeamsPresent ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent || !teamAReady || !teamBReady ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                             {bothTeamsPresent ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
                                         </button>
                                     </div>
                                     {!bothTeamsPresent && !defaultTimerActive && !defaultTimerExpired && (
-                                        <button onClick={() => { setDefaultTimerActive(true); setDefaultTimerSeconds(300); }} className="w-full flex items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors">
+                                        <button onClick={() => { setDefaultTimerActive(true); setDefaultTimerSeconds(3); }} className="w-full flex items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors">
                                             <Clock className="h-4 w-4" /> Start 5-min Default Timer
                                         </button>
                                     )}
@@ -1006,35 +1108,35 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                                     </div>
                                                     <h3 className="mt-4 text-lg font-bold text-destructive">Default Time Expired</h3>
                                                     <p className="mt-2 text-sm text-muted-foreground">
-                                                        {teamAVerified && !teamBVerified && 'Team A is checked in. Automatically declaring Team A as winner (51-0)...'}
-                                                        {!teamAVerified && teamBVerified && 'Team B is checked in. Automatically declaring Team B as winner (51-0)...'}
-                                                        {teamAVerified && teamBVerified && 'Both teams are checked in. Pick a winner or play anyway.'}
-                                                        {!teamAVerified && !teamBVerified && 'Neither team checked in. Pick a winner or play anyway.'}
+                                                        {teamAReady && !teamBReady && `Team A is checked in. Automatically declaring Team A as winner (${match.category?.game_to}-0)...`}
+                                                        {!teamAReady && teamBReady && `Team B is checked in. Automatically declaring Team B as winner (${match.category?.game_to}-0)...`}
+                                                        {teamAReady && teamBReady && 'Both teams are checked in. Pick a winner or play anyway.'}
+                                                        {!teamAReady && !teamBReady && 'Neither team checked in. Pick a winner or play anyway.'}
                                                     </p>
                                                     <div className="mt-6 flex flex-col gap-3">
-                                                        {(teamAVerified && !teamBVerified) && (
+                                                        {(teamAReady && !teamBReady) && (
                                                             <button onClick={() => handleDeclareDefaultWinner('team_a')} disabled={isSubmitting}
                                                                 className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-primary to-primary/80 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50">
-                                                                <Gavel className="h-5 w-5" /> {teamAName} Wins (51-0) — Declared
+                                                                <Gavel className="h-5 w-5" /> {teamAName} Wins ({match.category?.game_to}-0) — Declared
                                                             </button>
                                                         )}
-                                                        {(!teamAVerified && teamBVerified) && (
+                                                        {(!teamAReady && teamBReady) && (
                                                             <button onClick={() => handleDeclareDefaultWinner('team_b')} disabled={isSubmitting}
                                                                 className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-primary to-primary/80 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50">
-                                                                <Gavel className="h-5 w-5" /> {teamBName} Wins (51-0) — Declared
+                                                                <Gavel className="h-5 w-5" /> {teamBName} Wins ({match.category?.game_to}-0) — Declared
                                                             </button>
                                                         )}
-                                                        {(teamAVerified === teamBVerified) && (
+                                                        {(teamAReady === teamBReady) && (
                                                             <>
                                                                 <div className="flex flex-col gap-2">
                                                                     <p className="text-xs text-muted-foreground font-medium">Pick a winner:</p>
                                                                     <button onClick={() => handleDeclareDefaultWinner('team_a')} disabled={isSubmitting}
                                                                         className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary/10 border border-primary/20 py-3 text-sm font-semibold text-primary hover:bg-primary/20 active:scale-[0.98] transition-all disabled:opacity-50">
-                                                                        <Trophy className="h-5 w-5" /> {teamAName} Wins (51-0)
+                                                                        <Trophy className="h-5 w-5" /> {teamAName} Wins ({match.category?.game_to}-0)
                                                                     </button>
                                                                     <button onClick={() => handleDeclareDefaultWinner('team_b')} disabled={isSubmitting}
                                                                         className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary/10 border border-primary/20 py-3 text-sm font-semibold text-primary hover:bg-primary/20 active:scale-[0.98] transition-all disabled:opacity-50">
-                                                                        <Trophy className="h-5 w-5" /> {teamBName} Wins (51-0)
+                                                                        <Trophy className="h-5 w-5" /> {teamBName} Wins ({match.category?.game_to}-0)
                                                                     </button>
                                                                 </div>
                                                                 <div className="relative">
@@ -1061,15 +1163,15 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                                 </div>
 
                                 {/* Step 3: Ready to Start */}
-                                {(teamAVerified && teamBVerified && bothTeamsPresent) || (teamAVerified && teamBVerified && defaultTimerExpired) ? (
+                                {(teamAReady && teamBReady && bothTeamsPresent) || (teamAReady && teamBReady && defaultTimerExpired) ? (
                                     <button onClick={() => { setSetupComplete(true); setCoinPhase('idle'); }} className="w-full rounded-xl bg-gradient-to-r from-primary to-primary/80 p-4 text-center text-primary-foreground font-semibold shadow-lg hover:brightness-110 active:scale-[0.98] transition-all">
-                                        <div className="flex items-center justify-center gap-2"><Trophy className="h-5 w-5" /> Ready to Start — Proceed to Coin Toss</div>
+                                        <div className="flex items-center justify-center gap-2">Proceed to Coin Toss</div>
                                     </button>
                                 ) : (
                                     <div className="rounded-xl border border-primary/10 bg-muted/20 p-4 text-center">
                                         <p className="text-xs text-muted-foreground">
-                                            {!teamAVerified && 'Verify Team A '}{!teamAVerified && !teamBVerified && '& '}{!teamBVerified && 'Verify Team B '}
-                                            {(teamAVerified && teamBVerified && !bothTeamsPresent && !defaultTimerExpired) && 'Confirm both teams are present'}
+                                {!teamAReady && 'Verify Team A '}{!teamAReady && !teamBReady && '& '}{!teamBReady && 'Verify Team B '}
+                                            {(teamAReady && teamBReady && !bothTeamsPresent && !defaultTimerExpired) && 'Confirm both teams are present'}
                                         </p>
                                     </div>
                                 )}
@@ -1196,7 +1298,13 @@ const handleChoiceSelect = (choice: 'service' | 'court') => {
                     <div className="w-full max-w-sm rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-primary/5 p-6 shadow-2xl text-center">
                         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/20"><AlertTriangle className="h-8 w-8 text-primary" /></div>
                         <h3 className="mt-4 text-lg font-bold text-primary">Player Change Required</h3>
-                        <p className="mt-2 text-primary/70">10 rallies have been played. Please change players now.</p>
+                        <p className="mt-2 text-primary/70">
+                            {match.live_configuration?.court_change_trigger === 'rally-count'
+                                ? `${match.live_configuration.court_change_interval ?? 10} rallies have been played. Please change players now.`
+                                : match.live_configuration?.court_change_trigger === 'score-count'
+                                ? `A team has reached ${match.live_configuration.court_change_interval ?? 11} points. Please change sides now.`
+                                : 'Time to change sides. Please change courts now.'}
+                        </p>
                         <p className="mt-1 text-xs text-primary/50">The game timer continues running while you change players.</p>
                         <div className="mt-6 flex gap-3">
                             <button onClick={confirmPlayerChange} disabled={isSubmitting} className="flex-1 rounded-xl bg-gradient-to-r from-primary to-primary/80 py-3 text-sm font-semibold text-primary-foreground hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50">

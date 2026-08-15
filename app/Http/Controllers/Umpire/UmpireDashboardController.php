@@ -44,6 +44,7 @@ class UmpireDashboardController extends Controller
         // Group assignments by configuration
         $groupedAssignments = $assignments->groupBy('live_configuration_id')->map(function ($scores, $configId) {
             $config = $scores->first()->liveConfiguration;
+
             return [
                 'configuration' => $config,
                 'courts' => $scores->values(),
@@ -68,6 +69,7 @@ class UmpireDashboardController extends Controller
             if ($match->is_paused) {
                 return 'paused';
             }
+
             return 'playing';
         }
 
@@ -79,7 +81,7 @@ class UmpireDashboardController extends Controller
      */
     private function calculateTimeRemaining(LiveMatchScore $match): ?int
     {
-        if (!$match->start_play_at || !$match->category?->game_time) {
+        if (! $match->start_play_at || ! $match->category?->game_time) {
             return null;
         }
 
@@ -88,10 +90,12 @@ class UmpireDashboardController extends Controller
 
         if ($match->is_paused && $match->paused_at) {
             $elapsedSeconds = $match->start_play_at->diffInSeconds($match->paused_at);
+
             return max(0, $totalGameSeconds - $elapsedSeconds);
         }
 
         $elapsedSeconds = $match->start_play_at->diffInSeconds(now());
+
         return max(0, $totalGameSeconds - $elapsedSeconds);
     }
 
@@ -131,6 +135,7 @@ class UmpireDashboardController extends Controller
                 ->get()
                 ->map(function ($user) {
                     $profile = $user->playerInformation;
+
                     return [
                         'id' => $user->id,
                         'email' => $user->email,
@@ -149,6 +154,7 @@ class UmpireDashboardController extends Controller
                 ->get()
                 ->map(function ($user) {
                     $profile = $user->playerInformation;
+
                     return [
                         'id' => $user->id,
                         'email' => $user->email,
@@ -176,9 +182,9 @@ class UmpireDashboardController extends Controller
             // Match still going - only if exactly one team >= game_to
             $teamAAtGameTo = $liveMatchScore->team_a_score >= $gameTo;
             $teamBAtGameTo = $liveMatchScore->team_b_score >= $gameTo;
-            if ($teamAAtGameTo && !$teamBAtGameTo) {
+            if ($teamAAtGameTo && ! $teamBAtGameTo) {
                 $winner = 'team_a';
-            } elseif ($teamBAtGameTo && !$teamAAtGameTo) {
+            } elseif ($teamBAtGameTo && ! $teamAAtGameTo) {
                 $winner = 'team_b';
             }
         }
@@ -236,7 +242,7 @@ class UmpireDashboardController extends Controller
             }
         }
 
-        if (!empty($updateData)) {
+        if (! empty($updateData)) {
             $liveMatchScore->update($updateData);
         }
 
@@ -275,8 +281,14 @@ class UmpireDashboardController extends Controller
 
         $playingStatus = Status::where('type', 'live-match')->where('slug', 'playing')->first();
 
+        // Side-out (pickleball) scoring starts the game at 0-0-2:
+        // the initial serving team serves from their 2nd server.
+        $isSideOut = $liveMatchScore->liveConfiguration?->scoring_system === 'side-out';
+        $initialServiceNumber = $isSideOut ? 2 : 1;
+
         $liveMatchScore->update([
             'serving_team' => $validated['serving_team'],
+            'service_number' => $initialServiceNumber,
             'team_a_court' => $validated['team_a_court'],
             'team_b_court' => $validated['team_b_court'],
             'status_id' => $playingStatus->id ?? $liveMatchScore->status_id,
@@ -320,11 +332,14 @@ class UmpireDashboardController extends Controller
         $teamField = $validated['team'] === 'team_a' ? 'team_a_score' : 'team_b_score';
         $currentScore = $liveMatchScore->$teamField;
 
+        $isSideOut = $liveMatchScore->liveConfiguration?->scoring_system === 'side-out';
+        $serviceNumber = (int) ($liveMatchScore->service_number ?? 1);
+
         if ($validated['action'] === 'increment') {
             $newScore = $currentScore + 1;
             // Check if this is the winning point BEFORE updating rally count
             $isWinningPoint = $newScore >= ($liveMatchScore->category?->game_to ?? 21);
-            
+
             if ($isWinningPoint) {
                 // Winning point: don't increment rally count or trigger player change
                 // Everything waits until the "Won" button is confirmed
@@ -359,9 +374,56 @@ class UmpireDashboardController extends Controller
             'rally_count' => $rallyCount,
         ];
 
-        // Rally Point Scoring: the team that scores becomes the serving team
-        if ($validated['action'] === 'increment' && $liveMatchScore->liveConfiguration?->scoring_system === 'rally-point') {
-            $updateData['serving_team'] = $validated['team'];
+        if ($isSideOut) {
+            // ---- SIDE-OUT (pickleball) SCORING ----
+            // Only the serving team can score a point. The umpire presses "+" on
+            // whichever team actually WON the rally (the serving team OR the receiving team).
+            //
+            // If the serving team won the rally → they score -> keep serving.
+            // If the receiving team won the rally (opponent scored) →
+            //      nobody's score changes (only serving team can score), and:
+            //        - if serving team was on 1st server → switch to 2nd server (still serving)
+            //        - if serving team was on 2nd server → SIDE OUT → serve passes to opponent, 1st server
+            //
+            // Game starts at 0-0-2: the initial serving team begins on their 2nd server.
+
+            if ($validated['action'] === 'increment') {
+                if ($validated['team'] === $liveMatchScore->serving_team) {
+                    // Serving team won the rally → they score, keep serving, same server
+                    $updateData[$teamField] = $newScore;
+                } else {
+                    // Receiving team won the rally → no score, service transitions
+                    $updateData[$teamField] = $currentScore; // no change
+
+                    if ($serviceNumber === 1) {
+                        // 1st server lost → move to 2nd server (same team keeps serving)
+                        $updateData['service_number'] = 2;
+                    } else {
+                        // 2nd server lost → SIDE OUT, serve passes to the other team, 1st server
+                        $updateData['service_number'] = 1;
+                        $updateData['serving_team'] = $validated['team'];
+                    }
+                }
+
+                // Winning point must be scored by the serving team
+                // Read the serving team's score from the existing match record (the
+                // serving team's score key may not be present in $updateData when the
+                // receiving team won the rally, so we must not rely on it).
+                $gameTo = $liveMatchScore->category?->game_to ?? 21;
+                $servingScore = $liveMatchScore->serving_team === 'team_a'
+                    ? $liveMatchScore->team_a_score
+                    : $liveMatchScore->team_b_score;
+                $isWinningPoint = $servingScore >= $gameTo;
+            } else {
+                // Decrement (undo) - undo the last point. We keep serving team and service number
+                // as-is since a proper full undo is complex; scores roll back.
+                $updateData[$teamField] = $newScore;
+            }
+        } else {
+            // Rally Point Scoring: the team that scores becomes the serving team
+            if ($validated['action'] === 'increment') {
+                $updateData['serving_team'] = $validated['team'];
+            }
         }
 
         $liveMatchScore->update($updateData);
@@ -377,15 +439,26 @@ class UmpireDashboardController extends Controller
         $gameTo = $liveMatchScore->category?->game_to ?? 21;
         $winner = null;
         if ($validated['action'] === 'increment') {
-            $scoringTeam = $validated['team'];
-            $scoringScore = $scoringTeam === 'team_a' ? $liveMatchScore->team_a_score : $liveMatchScore->team_b_score;
-            if ($scoringScore >= $gameTo) {
-                $winner = $scoringTeam;
+            if ($isSideOut) {
+                // In side-out scoring, only the serving team can score/win.
+                $servingTeamNow = $liveMatchScore->serving_team;
+                $servingScoreNow = $servingTeamNow === 'team_a'
+                    ? $liveMatchScore->team_a_score
+                    : $liveMatchScore->team_b_score;
+                if ($servingScoreNow >= $gameTo) {
+                    $winner = $servingTeamNow;
+                }
+            } else {
+                $scoringTeam = $validated['team'];
+                $scoringScore = $scoringTeam === 'team_a' ? $liveMatchScore->team_a_score : $liveMatchScore->team_b_score;
+                if ($scoringScore >= $gameTo) {
+                    $winner = $scoringTeam;
+                }
             }
         }
 
-// Check if player change is needed (every 10 rallies)
-        $needsPlayerChange = $liveMatchScore->rally_count > 0 && $liveMatchScore->rally_count % 10 === 0;
+        // Check if player change is needed based on configuration
+        $needsPlayerChange = $this->checkNeedsPlayerChange($liveMatchScore, $validated['team'], $validated['action']);
 
         // Dispatch real-time update for score change
         $this->dispatchMatchScoreUpdate($liveMatchScore);
@@ -396,6 +469,103 @@ class UmpireDashboardController extends Controller
             'winner' => $winner,
             'needs_player_change' => $needsPlayerChange,
         ]);
+    }
+
+    /**
+     * Determine if a player change is needed from polling context (no scoring team/action info).
+     * For score-count: triggers when max score reaches the interval (naturally one-time since scores continue past it).
+     * For rally-count: triggers when rally_count hits the interval.
+     */
+    private function checkNeedsPlayerChangeFromPolling(LiveMatchScore $match): bool
+    {
+        $config = $match->liveConfiguration;
+        if (! $config || ! $config->allow_court_change || $config->court_change_trigger === 'none') {
+            return false;
+        }
+
+        $interval = $config->court_change_interval;
+
+        // For side-out scoring, the court change is a ONE-TIME event per match.
+        // Once it has been performed (court_change_done = true), it will never trigger again.
+        if ($config->scoring_system === 'side-out' && $match->court_change_done) {
+            return false;
+        }
+
+        switch ($config->court_change_trigger) {
+            case 'rally-count':
+                if ($interval && $match->rally_count > 0 && $match->rally_count % $interval === 0) {
+                    return true;
+                }
+                break;
+
+            case 'score-count':
+                // Trigger when either team's score exactly equals the interval (one-time threshold)
+                if ($interval) {
+                    $maxScore = max($match->team_a_score, $match->team_b_score);
+                    if ($maxScore === $interval) {
+                        return true;
+                    }
+                }
+                break;
+
+            case 'game-end':
+            case 'match-end':
+                // Handled at game/match boundaries
+                break;
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine if a player change (court swap) is needed based on the live configuration.
+     *
+     * Supports:
+     * - rally-count: Trigger when rally_count > 0 and rally_count % court_change_interval === 0
+     * - score-count: Trigger when either team's score equals court_change_interval (one-time per score threshold)
+     * - none/game-end/match-end: No player change mid-game
+     */
+    private function checkNeedsPlayerChange(LiveMatchScore $match, ?string $scoringTeam = null, ?string $action = null): bool
+    {
+        $config = $match->liveConfiguration;
+        if (! $config || ! $config->allow_court_change || $config->court_change_trigger === 'none') {
+            return false;
+        }
+
+        $interval = $config->court_change_interval;
+
+        // For side-out scoring, the court change is a ONE-TIME event per match.
+        // Once it has been performed (court_change_done = true), it will never trigger again.
+        if ($config->scoring_system === 'side-out' && $match->court_change_done) {
+            return false;
+        }
+
+        switch ($config->court_change_trigger) {
+            case 'rally-count':
+                // Trigger when rally_count is a multiple of the interval (e.g., every 6 rallies)
+                if ($interval && $match->rally_count > 0 && $match->rally_count % $interval === 0) {
+                    return true;
+                }
+                break;
+
+            case 'score-count':
+                // Trigger when a team's score reaches the interval value
+                // On increment only - when the scoring team's score matches the interval
+                if ($interval && $action === 'increment' && $scoringTeam) {
+                    $scoringScore = $scoringTeam === 'team_a' ? $match->team_a_score : $match->team_b_score;
+                    if ($scoringScore === $interval) {
+                        return true;
+                    }
+                }
+                break;
+
+            case 'game-end':
+            case 'match-end':
+                // These trigger at game/match boundaries, not mid-play
+                break;
+        }
+
+        return false;
     }
 
     /**
@@ -437,7 +607,7 @@ class UmpireDashboardController extends Controller
             ]);
         }
 
-$liveMatchScore->load([
+        $liveMatchScore->load([
             'liveConfiguration', 'liveConfiguration.status', 'category',
             'teamA', 'teamB', 'status',
         ]);
@@ -448,12 +618,14 @@ $liveMatchScore->load([
         return response()->json([
             'success' => true,
             'match' => $liveMatchScore,
-            'is_paused' => !$isPaused,
+            'is_paused' => ! $isPaused,
         ]);
     }
 
     /**
      * Confirm player change - resets rally_count to 0 and optionally swaps court sides.
+     * Court side swapping only happens when the court_change_trigger is 'score-count'.
+     * For 'rally-count' trigger, only rally_count is reset without swapping court sides.
      * After reset, a subsequent Undo (decrement) will set rally_count back to 9
      * since the last point was scored before the player change.
      */
@@ -473,10 +645,15 @@ $liveMatchScore->load([
             'rally_count' => 0,
         ];
 
-        // If swapping court sides, update team_a_court and team_b_court
-        if (isset($validated['swap_courts']) && $validated['swap_courts']) {
+        // Only swap court sides when swap_courts is explicitly true (score-count trigger)
+        if (! empty($validated['swap_courts'])) {
             $updateData['team_a_court'] = $validated['team_a_court'];
             $updateData['team_b_court'] = $validated['team_b_court'];
+        }
+
+        // Mark the one-time court change as done for side-out scoring.
+        if ($liveMatchScore->liveConfiguration?->scoring_system === 'side-out') {
+            $updateData['court_change_done'] = true;
         }
 
         $liveMatchScore->update($updateData);
@@ -558,16 +735,16 @@ $liveMatchScore->load([
             // This prevents re-triggering winner modal after undo
             $teamAAtGameTo = $liveMatchScore->team_a_score >= $gameTo;
             $teamBAtGameTo = $liveMatchScore->team_b_score >= $gameTo;
-            if ($teamAAtGameTo && !$teamBAtGameTo) {
+            if ($teamAAtGameTo && ! $teamBAtGameTo) {
                 $winner = 'team_a';
-            } elseif ($teamBAtGameTo && !$teamAAtGameTo) {
+            } elseif ($teamBAtGameTo && ! $teamAAtGameTo) {
                 $winner = 'team_b';
             }
             // If both are >= game_to, no winner from polling (it's mid-game after undo)
         }
 
-        // Check if player change is needed
-        $needsPlayerChange = $liveMatchScore->rally_count > 0 && $liveMatchScore->rally_count % 10 === 0;
+        // Check if player change is needed based on configuration
+        $needsPlayerChange = $this->checkNeedsPlayerChangeFromPolling($liveMatchScore);
 
         return response()->json([
             'success' => true,
@@ -594,7 +771,7 @@ $liveMatchScore->load([
         $configId = $match->live_configuration_id;
         $courtNumber = $match->court_number;
 
-        if (!$teamAId || !$teamBId || !$categoryId) {
+        if (! $teamAId || ! $teamBId || ! $categoryId) {
             return;
         }
 
@@ -638,7 +815,7 @@ $liveMatchScore->load([
     private function dispatchStandingsEvent(int $configurationId): void
     {
         $configuration = LiveConfiguration::find($configurationId);
-        if (!$configuration) {
+        if (! $configuration) {
             return;
         }
 
@@ -650,7 +827,7 @@ $liveMatchScore->load([
             ->with(['categories', 'categories.teams'])
             ->first();
 
-        if (!$config) {
+        if (! $config) {
             return;
         }
 
@@ -668,13 +845,15 @@ $liveMatchScore->load([
 
             foreach ($standings as $standing) {
                 $team = LiveTeam::find($standing->team_id);
-                if (!$team) continue;
+                if (! $team) {
+                    continue;
+                }
 
                 $latestMatch = LiveMatchScore::query()
                     ->where('live_configuration_id', $config->id)
                     ->where(function ($q) use ($standing) {
                         $q->where('team_a_id', $standing->team_id)
-                          ->orWhere('team_b_id', $standing->team_id);
+                            ->orWhere('team_b_id', $standing->team_id);
                     })
                     ->latest()
                     ->first();
@@ -713,7 +892,7 @@ $liveMatchScore->load([
     private function dispatchMatchScoreUpdate(LiveMatchScore $match): void
     {
         $configuration = LiveConfiguration::find($match->live_configuration_id);
-        if (!$configuration) {
+        if (! $configuration) {
             return;
         }
 
@@ -726,6 +905,8 @@ $liveMatchScore->load([
             'team_a_score' => $match->team_a_score,
             'team_b_score' => $match->team_b_score,
             'serving_team' => $match->serving_team,
+            'service_number' => $match->service_number,
+            'court_change_done' => $match->court_change_done,
             'rally_count' => $match->rally_count,
             'is_paused' => $match->is_paused,
             'team_a_court' => $match->team_a_court,
@@ -751,7 +932,7 @@ $liveMatchScore->load([
         $completedStatus = Status::where('type', 'live-match')->where('slug', 'completed')->first();
         $pendingStatus = Status::where('type', 'live-match')->where('slug', 'pending')->first();
 
-        // Persist standings BEFORE auto-advance (scores get reset)
+// Persist standings BEFORE auto-advance (scores get reset)
         $this->persistStandings($liveMatchScore);
         $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
 
@@ -760,6 +941,9 @@ $liveMatchScore->load([
             'end_play_at' => now(),
             'is_paused' => false,
         ]);
+
+        // Dispatch real-time update so the public /courts page reflects the finished match
+        $this->dispatchMatchScoreUpdate($liveMatchScore);
 
         // Auto-advance: if next teams are defined, shift them to current and reset
         if ($liveMatchScore->next_team_a_id && $liveMatchScore->next_team_b_id) {
@@ -807,7 +991,7 @@ $liveMatchScore->load([
         $completedStatus = Status::where('type', 'live-match')->where('slug', 'completed')->first();
         $pendingStatus = Status::where('type', 'live-match')->where('slug', 'pending')->first();
 
-        // Persist standings BEFORE creating next match (scores preserved here)
+// Persist standings BEFORE creating next match (scores preserved here)
         $this->persistStandings($liveMatchScore);
         $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
 
@@ -817,6 +1001,9 @@ $liveMatchScore->load([
             'end_play_at' => now(),
             'is_paused' => false,
         ]);
+
+        // Dispatch real-time update so the public /courts page reflects the finished match
+        $this->dispatchMatchScoreUpdate($liveMatchScore);
 
         // Auto-advance: if next teams are defined, create a NEW match record for the next pending match
         $nextTeamAId = $liveMatchScore->next_team_a_id;
@@ -891,7 +1078,7 @@ $liveMatchScore->load([
         $this->persistStandings($liveMatchScore);
         $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
 
-        // Mark current match as completed (keep its scores intact)
+// Mark current match as completed (keep its scores intact)
         $liveMatchScore->update([
             'team_a_score' => $liveMatchScore->team_a_score,
             'team_b_score' => $liveMatchScore->team_b_score,
@@ -899,6 +1086,9 @@ $liveMatchScore->load([
             'end_play_at' => now(),
             'is_paused' => false,
         ]);
+
+        // Dispatch real-time update so the public /courts page reflects the finished match
+        $this->dispatchMatchScoreUpdate($liveMatchScore);
 
         // Auto-advance: if next teams are defined, create a NEW match record for the next pending match
         $nextTeamAId = $liveMatchScore->next_team_a_id;
@@ -935,7 +1125,7 @@ $liveMatchScore->load([
         ]);
     }
 
-/**
+    /**
      * Save signatures for a completed match.
      */
     public function saveSignatures(Request $request, LiveMatchScore $liveMatchScore)
@@ -966,7 +1156,7 @@ $liveMatchScore->load([
             $updateData['team_b_signed_by'] = $validated['team_b_signed_by'];
         }
 
-        if (!empty($updateData)) {
+        if (! empty($updateData)) {
             $liveMatchScore->update($updateData);
         }
 
@@ -1011,6 +1201,7 @@ $liveMatchScore->load([
                 ->get()
                 ->map(function ($user) {
                     $profile = $user->playerInformation;
+
                     return [
                         'id' => $user->id,
                         'email' => $user->email,
@@ -1029,6 +1220,7 @@ $liveMatchScore->load([
                 ->get()
                 ->map(function ($user) {
                     $profile = $user->playerInformation;
+
                     return [
                         'id' => $user->id,
                         'email' => $user->email,
@@ -1041,11 +1233,13 @@ $liveMatchScore->load([
         }
 
         // Determine winner
-        $gameTo = $liveMatchScore->category?->game_to ?? 21;
+        // The winning team is the one with the higher score. This handles both
+        // normal finishes (a team reached game_to) AND time-expired ends where
+        // neither team reached game_to — the team with the higher score wins.
         $winner = null;
-        if ($liveMatchScore->team_a_score >= $gameTo) {
+        if ($liveMatchScore->team_a_score > $liveMatchScore->team_b_score) {
             $winner = 'team_a';
-        } elseif ($liveMatchScore->team_b_score >= $gameTo) {
+        } elseif ($liveMatchScore->team_b_score > $liveMatchScore->team_a_score) {
             $winner = 'team_b';
         }
 
@@ -1065,4 +1259,3 @@ $liveMatchScore->load([
         ]);
     }
 }
-

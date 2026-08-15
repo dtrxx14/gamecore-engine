@@ -65,6 +65,7 @@ class LiveConfigurationController extends Controller
 
         LiveConfiguration::create([
             'name' => $validated['name'],
+            'slug' => $this->generateUniqueSlug($validated['name']),
             'number_of_courts' => $validated['number_of_courts'],
             'scoring_system' => $validated['scoring_system'],
             'allow_court_change' => $validated['allow_court_change'] ?? false,
@@ -75,6 +76,23 @@ class LiveConfigurationController extends Controller
 
         return to_route('admin.live-configuration.index')
             ->with('success', 'Live configuration created successfully.');
+    }
+
+    /**
+     * Generate a unique slug from a given name.
+     */
+    private function generateUniqueSlug(string $name): string
+    {
+        $base = \Illuminate\Support\Str::slug($name);
+        $slug = $base;
+        $counter = 2;
+
+        while (LiveConfiguration::where('slug', $slug)->exists()) {
+            $slug = $base.'-'.$counter;
+            $counter++;
+        }
+
+        return $slug;
     }
 
     /**
@@ -106,7 +124,11 @@ class LiveConfigurationController extends Controller
             'matchScores.umpire',
         ]);
 
-        $teams = LiveTeam::query()->with('category')->latest('created_at')->get();
+        $teams = LiveTeam::query()
+            ->where('live_configuration_id', $liveConfiguration->id)
+            ->with('category')
+            ->latest('created_at')
+            ->get();
         $statuses = Status::query()->where('type', 'live-match')->get(['id', 'name', 'slug']);
 
         // Resolve player names for team display and team edit modal
@@ -192,10 +214,9 @@ class LiveConfigurationController extends Controller
             'status_id' => ['required', 'integer', 'exists:statuses,id'],
         ]);
 
-        $pendingStatus = Status::where('type', 'live-match')->where('slug', 'pending')->first();
-
-        $liveConfiguration->where('status_id', $pendingStatus->id)->update([
+        $liveConfiguration->update([
             'name' => $validated['name'],
+            'slug' => $this->generateUniqueSlug($validated['name']),
             'number_of_courts' => $validated['number_of_courts'],
             'scoring_system' => $validated['scoring_system'],
             'allow_court_change' => $validated['allow_court_change'] ?? false,
@@ -215,6 +236,9 @@ class LiveConfigurationController extends Controller
     {
         $liveConfiguration->matchScores()->delete();
         $liveConfiguration->categories()->delete();
+        LiveStanding::where('live_configuration_id', $liveConfiguration->id)->delete();
+        // Delete only the teams scoped to this configuration to avoid orphaned records.
+        LiveTeam::where('live_configuration_id', $liveConfiguration->id)->delete();
         $liveConfiguration->delete();
 
         return to_route('admin.live-configuration.index')
@@ -308,6 +332,7 @@ class LiveConfigurationController extends Controller
     public function storeTeam(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'live_configuration_id' => ['required', 'integer', 'exists:live_configurations,id'],
             'name' => ['required', 'string', 'max:255'],
             'category_id' => ['nullable', 'integer', 'exists:live_categories,id'],
             'player_ids' => ['nullable', 'array'],
@@ -315,6 +340,7 @@ class LiveConfigurationController extends Controller
         ]);
 
         LiveTeam::create([
+            'live_configuration_id' => $validated['live_configuration_id'],
             'name' => $validated['name'],
             'category_id' => $validated['category_id'] ?? null,
             'player_ids' => $validated['player_ids'] ?? [],

@@ -79,6 +79,7 @@ interface Props {
 }
 
 export default function MatchSummary({ match, winner, duration_formatted }: Props) {
+    
     const [teamASignature, setTeamASignature] = useState<string | null>(match.team_a_signature ?? null);
     const [teamBSignature, setTeamBSignature] = useState<string | null>(match.team_b_signature ?? null);
     const [isSaving, setIsSaving] = useState(false);
@@ -110,6 +111,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
         });
     };
 
+    winner = winner ?? (match.team_a_score > match.team_b_score ? 'team_a' : match.team_b_score > match.team_a_score ? 'team_b' : null);
     const winnerName = winner === 'team_a' ? teamAName : teamBName;
     const winnerScore = winner === 'team_a' ? match.team_a_score : match.team_b_score;
     const loserScore = winner === 'team_a' ? match.team_b_score : match.team_a_score;
@@ -321,7 +323,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                     <div className="rounded-xl border border-border/60 bg-card/50 p-5">
                         <div className="flex items-center gap-2 mb-4">
                             <Pen className="h-4 w-4 text-red-500" />
-                            <h3 className="text-sm font-semibold">Captain Signatures</h3>
+                            <h3 className="text-sm font-semibold">{match.live_configuration?.scoring_system == 'rally-point' ? 'Captain' : 'Player'} Signatures</h3>
                             {isSignedMode && (
                                 <Badge variant="outline" className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400 ml-auto">
                                     <Check className="mr-0.5 h-3 w-3" /> Signed
@@ -331,7 +333,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                         <p className="text-xs text-muted-foreground mb-4">
                             {isSignedMode
                                 ? 'Signatures have been collected and saved.'
-                                : 'Both team captains must sign below to confirm the match results.'}
+                                : match.live_configuration?.scoring_system == 'rally-point' ? 'Both team captains must sign below to confirm the match results.' : 'Both team representatives must sign below to confirm the match results.'}
                         </p>
 
                         <div className="space-y-4">
@@ -345,7 +347,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                                     )}
                                 </div>
                                 <SignaturePad
-                                    label="Team Captain Signature"
+                                    label={match.live_configuration?.scoring_system == 'rally-point' ? "Team Captain Signature" : "Team Representative Signature"}
                                     color="#2563eb"
                                     onSave={(dataUrl) => setTeamASignature(dataUrl)}
                                     disabled={isSignedMode}
@@ -363,7 +365,7 @@ export default function MatchSummary({ match, winner, duration_formatted }: Prop
                                     )}
                                 </div>
                                 <SignaturePad
-                                    label="Team Captain Signature"
+                                    label={match.live_configuration?.scoring_system == 'rally-point' ? "Team Captain Signature" : "Team Representative Signature"}
                                     color="#9333ea"
                                     onSave={(dataUrl) => setTeamBSignature(dataUrl)}
                                     disabled={isSignedMode}

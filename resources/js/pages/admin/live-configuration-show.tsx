@@ -53,6 +53,7 @@ interface LiveTeam {
     name: string;
     category_id: number | null;
     player_ids: number[];
+    live_configuration_id?: number | null;
     category?: LiveCategory | null;
     created_at: string;
 }
@@ -303,6 +304,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
             name: teamForm.name,
             category_id: teamForm.category_id ? Number(teamForm.category_id) : null,
             player_ids: playerIds,
+            live_configuration_id: configuration.id,
         };
 
         if (editingTeam) {
@@ -381,21 +383,11 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
             if (!nextB) errs.next_team_b_id = 'If Next Team A is set, Next Team B is also required.';
         }
 
-        if (teamA && teamB && teamA === teamB) {
+if (teamA && teamB && teamA === teamB) {
             errs.team_b_id = 'Team B cannot be the same as Team A.';
         }
-        if (teamA && nextA && teamA === nextA) {
-            errs.next_team_a_id = 'Next Team A cannot be the same as Team A.';
-        }
-        if (teamA && nextB && teamA === nextB) {
-            errs.next_team_b_id = 'Next Team B cannot be the same as Team A.';
-        }
-        if (teamB && nextA && teamB === nextA) {
-            errs.next_team_a_id = 'Next Team A cannot be the same as Team B.';
-        }
-        if (teamB && nextB && teamB === nextB) {
-            errs.next_team_b_id = 'Next Team B cannot be the same as Team B.';
-        }
+        // The next-team queue intentionally allows teams that are already playing
+        // as Team A or Team B, so those teams can be requeued for the next match.
         if (nextA && nextB && nextA === nextB) {
             errs.next_team_b_id = 'Next Team B cannot be the same as Next Team A.';
         }
@@ -837,11 +829,23 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
                                             </div>
                                             <div>
                                                 <div className="text-sm font-semibold text-foreground">Court {courtNumber}</div>
-                                                {match && match.category && (
-                                                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0">
-                                                        {match.category.name}
-                                                    </Badge>
-                                                )}
+                                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                                    {match && match.category && (
+                                                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] px-1.5 py-0">
+                                                            {match.category.name}
+                                                        </Badge>
+                                                    )}
+                                                    {match && match.category?.game_time ? (
+                                                        <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-400 text-[10px] px-1.5 py-0">
+                                                            <Clock className="mr-0.5 h-2.5 w-2.5" />
+                                                            {match.category.game_time} mins
+                                                        </Badge>
+                                                    ) : match && (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                                                            No time limit
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                         {match ? (

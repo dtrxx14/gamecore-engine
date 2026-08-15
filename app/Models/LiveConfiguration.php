@@ -8,6 +8,7 @@ class LiveConfiguration extends Model
 {
     protected $fillable = [
         'name',
+        'slug',
         'tournament_id',
         'number_of_courts',
         'scoring_system',
@@ -35,5 +36,10 @@ class LiveConfiguration extends Model
     public function categories()
     {
         return $this->hasMany(LiveCategory::class);
+    }
+
+    public function teams()
+    {
+        return $this->hasMany(LiveTeam::class);
     }
 }
