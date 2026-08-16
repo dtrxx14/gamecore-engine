@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Eye, Search, ChevronLeft, ChevronRight, LayoutGrid, Sparkles } from 'lucide-react';
+import { Eye, Search, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -90,70 +90,19 @@ interface Props {
     };
 }
 
-// Replace this with the real API response once the backend endpoint is ready.
-const sampleManagementOrganizations: PaginatedOrganizations = {
-    data: [
-        {
-            id: 1,
-            name: 'Apex Sports Club',
-            email: 'hello@apexsports.test',
-            contact_number: '+1 555 0101',
-            website_url: 'https://apexsports.test',
-            description: 'Community-driven esports and badminton club based in Seattle.',
-            address: '1200 Pine Street',
-            zip_code: '98101',
-            country: { id: 1, name: 'United States' },
-            state_province: { id: 1, name: 'Washington' },
-            status: { id: 2, name: 'Approved', slug: 'approved' },
-            members: [
-                {
-                    id: 101,
-                    user: { id: 11, name: 'Mina Torres', email: 'mina@apexsports.test' },
-                    role: { id: 20, name: 'Admin', slug: 'admin' },
-                },
-            ],
-            tournaments: [
-                { id: 301, title: 'Summer League 2026', slug: 'summer-league-2026', start_date: '2026-08-10', description: 'Regional tournament' },
-            ],
-            created_at: '2026-06-01T10:00:00.000Z',
-        },
-        {
-            id: 2,
-            name: 'Northstar Gaming',
-            email: 'contact@northstargaming.test',
-            contact_number: '+44 7700 900123',
-            website_url: 'https://northstargaming.test',
-            description: 'Tournament organizer focused on amateur player development.',
-            address: '45 King Street',
-            zip_code: 'SW1A 1AA',
-            country: { id: 2, name: 'United Kingdom' },
-            state_province: { id: 2, name: 'London' },
-            status: { id: 2, name: 'Approved', slug: 'approved' },
-            members: [
-                {
-                    id: 102,
-                    user: { id: 12, name: 'Jonah Blake', email: 'jonah@northstargaming.test' },
-                    role: { id: 20, name: 'Admin', slug: 'admin' },
-                },
-            ],
-            tournaments: [
-                { id: 302, title: 'Winter Invitational', slug: 'winter-invitational', start_date: '2026-12-02', description: 'Open tournament' },
-            ],
-            created_at: '2026-06-03T14:30:00.000Z',
-        },
-    ],
-    current_page: 1,
-    last_page: 1,
-    per_page: 10,
-    total: 2,
-    from: 1,
-    to: 2,
-    links: [],
-};
-
 export default function OrganizerManagement({ organizations, filters }: Props) {
-    // const pageOrganizations = organizations?.data?.length ? organizations : sampleManagementOrganizations;
-    const pageOrganizations = organizations;
+    const pageOrganizations: PaginatedOrganizations = organizations && Array.isArray(organizations.data)
+        ? organizations
+        : {
+            data: [],
+            current_page: 1,
+            last_page: 1,
+            per_page: Number(filters?.per_page ?? 10),
+            total: 0,
+            from: 0,
+            to: 0,
+            links: [],
+        };
 
     const [search, setSearch] = useState(filters.search);
     const [perPage, setPerPage] = useState(String(filters.per_page));

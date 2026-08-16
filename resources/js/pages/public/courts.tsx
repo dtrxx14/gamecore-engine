@@ -472,10 +472,9 @@ const getTeamInitials = (name: string) => {
                                     {court.serving_team === 'team_a' && isSideOut && (
                                         <div className="flex flex-col items-center gap-0.5">
                                             <div className="flex gap-1">
-                                                <span className="h-3 w-3 rounded-full bg-red-500 dark:bg-white" />
-                                                <span className={`h-3 w-3 rounded-full ${court.service_number >= 2 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                                                <span className={`h-3 w-3 rounded-full ${(court.service_number ?? 1) >= 1 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                                                <span className={`h-3 w-3 rounded-full ${(court.service_number ?? 1) === 2 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
                                             </div>
-                                            {/* <span className="text-[8px] font-bold uppercase tracking-wide text-red-500 dark:text-white">Serve</span> */}
                                         </div>
                                     )}
                                     {court.serving_team === 'team_a' && !isSideOut && (
@@ -539,10 +538,9 @@ const getTeamInitials = (name: string) => {
                                     {court.serving_team === 'team_b' && isSideOut && (
                                         <div className="flex flex-col items-center gap-0.5">
                                             <div className="flex gap-1">
-                                                <span className="h-3 w-3 rounded-full bg-red-500 dark:bg-white" />
-                                                <span className={`h-3 w-3 rounded-full ${court.service_number >= 2 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                                                <span className={`h-3 w-3 rounded-full ${(court.service_number ?? 1) >= 1 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                                                <span className={`h-3 w-3 rounded-full ${(court.service_number ?? 1) === 2 ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
                                             </div>
-                                            {/* <span className="text-[8px] font-bold uppercase tracking-wide text-red-500 dark:text-white">Serve</span> */}
                                         </div>
                                     )}
                                     {court.serving_team === 'team_b' && !isSideOut && (

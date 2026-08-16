@@ -1,5 +1,7 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { Activity, Swords, UserRound, Clock, ShieldHalf } from 'lucide-react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { Activity, Swords, Clock, ShieldHalf } from 'lucide-react';
+import { useEffect } from 'react';
+import echo from '@/echo';
 import { Badge } from '@/components/ui/badge';
 
 interface Status {
@@ -62,6 +64,45 @@ interface Props {
 }
 
 export default function UmpireDashboard({ groupedAssignments }: Props) {
+    const { props } = usePage<{ auth?: { user?: { id: number } } }>();
+    const currentUserId = props.auth?.user?.id;
+
+    useEffect(() => {
+        if (!currentUserId) {
+            return;
+        }
+
+        const channels: any[] = [];
+
+        const subscribeToChannel = (channelName: string) => {
+            const channel = echo.channel(channelName);
+
+            channel.listen('.match.score.updated', () => {
+                router.reload({
+                    only: ['groupedAssignments'],
+                    preserveUrl: true,
+                });
+            });
+
+            channels.push(channel);
+        };
+
+        if (groupedAssignments.length) {
+            groupedAssignments.forEach((group) => {
+                subscribeToChannel(`courts.${group.configuration.id}`);
+            });
+        }
+
+        subscribeToChannel(`umpires.${currentUserId}`);
+
+        return () => {
+            channels.forEach((channel) => {
+                channel.stopListening('.match.score.updated');
+                echo.leave(channel.name);
+            });
+        };
+    }, [currentUserId, groupedAssignments]);
+
     const openMatchDetail = (match: LiveMatchScore) => {
         router.visit(`/umpire/match/${match.id}`);
     };
@@ -216,7 +257,7 @@ export default function UmpireDashboard({ groupedAssignments }: Props) {
                                         </div>
 
                                         {/* Click hint */}
-                                        <div className="mt-2 text-center text-[10px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="mt-2 text-center text-[10px] text-muted-foreground/50 transition-opacity">
                                             Click to manage match
                                         </div>
                                     </div>

@@ -12,6 +12,7 @@ use App\Models\LiveTeam;
 use App\Models\Status;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Response;
 
 class UmpireDashboardController extends Controller
@@ -783,8 +784,8 @@ class UmpireDashboardController extends Controller
             'live_configuration_id' => $configId,
             'category_id' => $categoryId,
             'team_id' => $teamAId,
-            'court_number' => $courtNumber,
         ]);
+        $standingA->court_number = $courtNumber;
         $standingA->matches_played++;
         $standingA->wins += $teamAWon ? 1 : 0;
         $standingA->losses += $teamAWon ? 0 : 1;
@@ -798,8 +799,8 @@ class UmpireDashboardController extends Controller
             'live_configuration_id' => $configId,
             'category_id' => $categoryId,
             'team_id' => $teamBId,
-            'court_number' => $courtNumber,
         ]);
+        $standingB->court_number = $courtNumber;
         $standingB->matches_played++;
         $standingB->wins += $teamAWon ? 0 : 1;
         $standingB->losses += $teamAWon ? 1 : 0;
@@ -835,9 +836,19 @@ class UmpireDashboardController extends Controller
             $standings = LiveStanding::query()
                 ->where('live_configuration_id', $config->id)
                 ->where('category_id', $category->id)
-                ->orderBy('wins', 'desc')
-                ->orderBy('point_differential', 'desc')
-                ->orderBy('points_for', 'desc')
+                ->groupBy('team_id')
+                ->select([
+                    'team_id',
+                    DB::raw('SUM(matches_played) as matches_played'),
+                    DB::raw('SUM(wins) as wins'),
+                    DB::raw('SUM(losses) as losses'),
+                    DB::raw('SUM(points_for) as points_for'),
+                    DB::raw('SUM(points_against) as points_against'),
+                    DB::raw('SUM(point_differential) as point_differential'),
+                ])
+                ->orderByRaw('SUM(wins) DESC')
+                ->orderByRaw('SUM(point_differential) DESC')
+                ->orderByRaw('SUM(points_for) DESC')
                 ->get();
 
             $teams = [];
@@ -859,22 +870,25 @@ class UmpireDashboardController extends Controller
                     ->first();
 
                 $teams[] = [
+                    'live_configuration_id' => $config->id,
+                    'category_id' => $category->id,
                     'rank' => $rank,
                     'team_id' => $standing->team_id,
                     'team_name' => $team->name,
                     'court_number' => $latestMatch->court_number ?? 0,
-                    'matches_played' => $standing->matches_played,
-                    'wins' => $standing->wins,
-                    'losses' => $standing->losses,
-                    'points_for' => $standing->points_for,
-                    'points_against' => $standing->points_against,
-                    'point_differential' => $standing->point_differential,
+                    'matches_played' => (int) $standing->matches_played,
+                    'wins' => (int) $standing->wins,
+                    'losses' => (int) $standing->losses,
+                    'points_for' => (int) $standing->points_for,
+                    'points_against' => (int) $standing->points_against,
+                    'point_differential' => (int) $standing->point_differential,
                 ];
 
                 $rank++;
             }
 
             $standingsData[] = [
+                'live_configuration_id' => $config->id,
                 'category_id' => $category->id,
                 'category_name' => $category->name,
                 'game_to' => $category->game_to ?? 21,
@@ -900,8 +914,15 @@ class UmpireDashboardController extends Controller
         $timeRemaining = $this->calculateTimeRemaining($match);
 
         $matchData = [
+            'id' => $match->id,
             'live_configuration_id' => $match->live_configuration_id,
             'court_number' => $match->court_number,
+            'category_id' => $match->category_id,
+            'next_category_id' => $match->next_category_id,
+            'team_a_id' => $match->team_a_id,
+            'team_b_id' => $match->team_b_id,
+            'next_team_a_id' => $match->next_team_a_id,
+            'next_team_b_id' => $match->next_team_b_id,
             'team_a_score' => $match->team_a_score,
             'team_b_score' => $match->team_b_score,
             'serving_team' => $match->serving_team,
@@ -911,9 +932,12 @@ class UmpireDashboardController extends Controller
             'is_paused' => $match->is_paused,
             'team_a_court' => $match->team_a_court,
             'team_b_court' => $match->team_b_court,
+            'umpire_id' => $match->umpire_id,
+            'status_id' => $match->status_id,
             'start_play_at' => $match->start_play_at?->toIso8601String(),
             'end_play_at' => $match->end_play_at?->toIso8601String(),
             'time_remaining' => $timeRemaining,
+            'deleted' => false,
         ];
 
         broadcast(new MatchScoreUpdated($configuration, $matchData));
@@ -932,7 +956,7 @@ class UmpireDashboardController extends Controller
         $completedStatus = Status::where('type', 'live-match')->where('slug', 'completed')->first();
         $pendingStatus = Status::where('type', 'live-match')->where('slug', 'pending')->first();
 
-// Persist standings BEFORE auto-advance (scores get reset)
+        // Persist standings BEFORE auto-advance (scores get reset)
         $this->persistStandings($liveMatchScore);
         $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
 
@@ -991,7 +1015,7 @@ class UmpireDashboardController extends Controller
         $completedStatus = Status::where('type', 'live-match')->where('slug', 'completed')->first();
         $pendingStatus = Status::where('type', 'live-match')->where('slug', 'pending')->first();
 
-// Persist standings BEFORE creating next match (scores preserved here)
+        // Persist standings BEFORE creating next match (scores preserved here)
         $this->persistStandings($liveMatchScore);
         $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
 
@@ -1078,7 +1102,7 @@ class UmpireDashboardController extends Controller
         $this->persistStandings($liveMatchScore);
         $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
 
-// Mark current match as completed (keep its scores intact)
+        // Mark current match as completed (keep its scores intact)
         $liveMatchScore->update([
             'team_a_score' => $liveMatchScore->team_a_score,
             'team_b_score' => $liveMatchScore->team_b_score,

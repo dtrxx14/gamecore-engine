@@ -1,8 +1,11 @@
 import { Head } from '@inertiajs/react';
 import { useEffect, useState, useRef } from 'react';
-import { Trophy, TrendingUp, TrendingDown, Minus, Medal, Swords, Clock, ChevronDown, ChevronRight, Users, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import AppLogoIcon from '@/components/app-logo-icon';
+import { Trophy, TrendingUp, TrendingDown, Minus, Medal, Swords, Clock, ChevronDown, ChevronRight, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 
 interface StandingTeam {
+    live_configuration_id?: number;
+    category_id?: number;
     rank: number;
     team_id: number;
     team_name: string;
@@ -16,6 +19,7 @@ interface StandingTeam {
 }
 
 interface StandingsCategory {
+    live_configuration_id?: number;
     category_id: number;
     category_name: string;
     game_to: number;
@@ -158,27 +162,48 @@ return () => {
     }, [configurations, effectiveConfigs]);
 
     const handleStandingsUpdate = (configId: number, event: any) => {
-        // The event structure from StandingsUpdated event sends:
-        // { configurationId, standings: [{ category_id, category_name, game_to, teams: [...] }] }
-        const updatedCategories = event.standings || event.data || [];
+        const updatedCategories: StandingsCategory[] = Array.isArray(event?.standings)
+            ? event.standings
+            : Array.isArray(event?.data)
+                ? event.data
+                : [];
 
         setStandingsByConfig(prev => {
+            const configExists = prev.some(config => config.configuration_id === configId);
+
+            if (!configExists && updatedCategories.length > 0) {
+                return [
+                    ...prev,
+                    {
+                        configuration_id: configId,
+                        configuration_name: `Live Configuration ${configId}`,
+                        scoring_system: 'side-out',
+                        pusher_channel: `standings.${configId}`,
+                        categories: updatedCategories,
+                    },
+                ];
+            }
+
             return prev.map(config => {
                 if (config.configuration_id !== configId) return config;
 
+                const updatedByCategory = new Map<number, StandingsCategory>();
+                updatedCategories.forEach((category: StandingsCategory) => {
+                    updatedByCategory.set(Number(category.category_id), category);
+                });
+
                 return {
                     ...config,
-                    categories: config.categories.map(existingCat => {
-                        const updatedCat = updatedCategories.find(
-                            (uc: any) => uc.category_id === existingCat.category_id
-                        );
-                        if (updatedCat) {
-                            return {
-                                ...existingCat,
-                                teams: updatedCat.teams || existingCat.teams,
-                            };
+                    categories: (config.categories ?? []).map(existingCat => {
+                        const updatedCat = updatedByCategory.get(existingCat.category_id);
+                        if (!updatedCat) {
+                            return existingCat;
                         }
-                        return existingCat;
+
+                        return {
+                            ...existingCat,
+                            teams: Array.isArray(updatedCat.teams) ? updatedCat.teams : existingCat.teams,
+                        };
                     }),
                 };
             });
@@ -247,47 +272,49 @@ const startPolling = () => {
         <>
             <Head title="Live Standings" />
 
-            <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-slate-900">
-                {/* Header */}
-                <div className="sticky top-0 z-50 border-b border-white/5 bg-gray-950/80 backdrop-blur-xl">
+            <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.18),_transparent_40%),linear-gradient(180deg,#111827_0%,#0f172a_40%,#111827_100%)] text-slate-100">
+                <div className="sticky top-0 z-50 border-b border-red-500/10 bg-slate-950/80 backdrop-blur-xl">
                     <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
                         <div className="flex items-center gap-3">
-                            <Trophy className="h-7 w-7 text-amber-400" />
-                            <h1 className="text-xl font-bold text-white sm:text-2xl">Live Standings</h1>
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 shadow-[0_8px_30px_rgba(239,68,68,0.2)]">
+                                <AppLogoIcon className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <h1 className="text-lg font-semibold text-white sm:text-xl">Live Standings</h1>
+                                <p className="text-[10px] uppercase tracking-[0.2em] text-red-300/80">GameCore</p>
+                            </div>
                         </div>
                         <div className="flex items-center gap-3">
                             {connected ? (
-                                <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                                <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-emerald-300">
                                     <Wifi className="h-3.5 w-3.5" />
                                     Live
                                 </span>
                             ) : (
-                                <span className="flex items-center gap-1.5 text-xs text-amber-400">
+                                <span className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-amber-300">
                                     <WifiOff className="h-3.5 w-3.5" />
                                     Polling
                                 </span>
                             )}
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-slate-400">
                                 Updated {timeAgo(lastUpdated)}
                             </span>
                         </div>
                     </div>
 
-                    {/* Search bar */}
-                    <div className="border-t border-white/5 px-4 py-2 sm:px-6 lg:px-8">
+                    <div className="border-t border-red-500/10 px-4 py-3 sm:px-6 lg:px-8">
                         <div className="mx-auto max-w-7xl">
                             <input
                                 type="text"
                                 placeholder="Search teams..."
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-amber-500/50 focus:bg-white/10"
+                                className="w-full rounded-xl border border-red-500/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-400 outline-none transition-all focus:border-red-400/60 focus:bg-white/10"
                             />
                         </div>
                     </div>
                 </div>
 
-                {/* Main Content */}
                 <div className="mx-auto max-w-7xl px-4 pb-12 pt-6 sm:px-6 lg:px-8">
                     <div className="space-y-6">
                         {standingsByConfig.map(config => {
@@ -297,104 +324,102 @@ const startPolling = () => {
                                 <div
                                     key={config.configuration_id}
                                     id={`config-${config.configuration_id}`}
-                                    className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm"
+                                    className="overflow-hidden rounded-2xl border border-red-500/10 bg-slate-900/70 shadow-[0_18px_45px_rgba(15,23,42,0.45)] backdrop-blur-sm"
                                 >
-                                    {/* Configuration Header */}
                                     <button
                                         onClick={() => toggleConfig(config.configuration_id)}
-                                        className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-white/5"
+                                        className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-red-500/5"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <Medal className="h-5 w-5 text-amber-400" />
-                                            <h2 className="text-lg font-semibold text-white">
-                                                {config.configuration_name}
-                                            </h2>
-                                            <span className="rounded-full bg-amber-400/10 px-2.5 py-0.5 text-xs font-medium text-amber-300">
-                                                {config.scoring_system === 'rally-point' ? 'Rally Point' : 'Standard'}
-                                            </span>
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-300">
+                                                <Medal className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-lg font-semibold text-white">
+                                                    {config.configuration_name}
+                                                </h2>
+                                                <div className="mt-1 flex items-center gap-2">
+                                                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-red-300">
+                                                        {config.scoring_system === 'rally-point' ? 'Rally Point' : 'Side Out'}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
                                         {isConfigExpanded ? (
-                                            <ChevronDown className="h-5 w-5 text-gray-400" />
+                                            <ChevronDown className="h-5 w-5 text-slate-400" />
                                         ) : (
-                                            <ChevronRight className="h-5 w-5 text-gray-400" />
+                                            <ChevronRight className="h-5 w-5 text-slate-400" />
                                         )}
                                     </button>
 
-                                    {/* Categories */}
                                     {isConfigExpanded && (
-                                        <div className="border-t border-white/5">
+                                        <div className="border-t border-red-500/10 bg-slate-950/30">
                                             {config.categories.map(category => {
                                                 const catKey = `${config.configuration_id}-${category.category_id}`;
                                                 const isCatExpanded = expandedCategories[catKey] ?? true;
                                                 const filteredTeams = filterTeams(category.teams);
 
                                                 return (
-                                                    <div key={category.category_id} className="border-b border-white/5 last:border-b-0">
-                                                        {/* Category Header */}
+                                                    <div key={category.category_id} className="border-b border-red-500/10 last:border-b-0">
                                                         <button
                                                             onClick={() => toggleCategory(catKey)}
-                                                            className="flex w-full items-center justify-between px-6 py-3 text-left transition-colors hover:bg-white/5"
+                                                            className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-red-500/5"
                                                         >
                                                             <div className="flex items-center gap-2">
-                                                                <Swords className="h-4 w-4 text-gray-400" />
-                                                                <h3 className="text-sm font-medium text-gray-300">
-                                                                    {category.category_name}
-                                                                </h3>
-                                                                <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-gray-500">
-                                                                    First to {category.game_to}
-                                                                </span>
+                                                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-300">
+                                                                    <Swords className="h-4 w-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <h3 className="text-sm font-semibold text-slate-100">{category.category_name}</h3>
+                                                                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">First to {category.game_to}</p>
+                                                                </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-xs text-gray-500">
+                                                                <span className="text-xs text-slate-400">
                                                                     {filteredTeams.length} team{filteredTeams.length !== 1 ? 's' : ''}
                                                                 </span>
                                                                 {isCatExpanded ? (
-                                                                    <ChevronDown className="h-4 w-4 text-gray-500" />
+                                                                    <ChevronDown className="h-4 w-4 text-slate-400" />
                                                                 ) : (
-                                                                    <ChevronRight className="h-4 w-4 text-gray-500" />
+                                                                    <ChevronRight className="h-4 w-4 text-slate-400" />
                                                                 )}
                                                             </div>
                                                         </button>
 
-                                                        {/* Teams Table */}
                                                         {isCatExpanded && (
-                                                            <div className="overflow-x-auto px-6 pb-4">
+                                                            <div className="overflow-x-auto px-5 pb-4">
                                                                 {filteredTeams.length === 0 ? (
-                                                                    <p className="py-8 text-center text-sm text-gray-500">
+                                                                    <p className="py-8 text-center text-sm text-slate-400">
                                                                         {searchQuery ? 'No teams match your search.' : 'No teams in this category yet.'}
                                                                     </p>
                                                                 ) : (
                                                                     <table className="w-full text-left text-sm">
                                                                         <thead>
-                                                                            <tr className="border-b border-white/5 text-xs uppercase tracking-wider text-gray-500">
+                                                                            <tr className="border-b border-red-500/10 text-[10px] uppercase tracking-[0.2em] text-slate-400">
                                                                                 <th className="py-2 pr-2 font-medium">#</th>
                                                                                 <th className="py-2 px-2 font-medium">Team</th>
-                                                                                <th className="py-2 px-2 font-medium text-center">MP</th>
-                                                                                <th className="py-2 px-2 font-medium text-center">W</th>
-                                                                                <th className="py-2 px-2 font-medium text-center">L</th>
-                                                                                <th className="py-2 px-2 font-medium text-center">PF</th>
-                                                                                <th className="py-2 px-2 font-medium text-center">PA</th>
-                                                                                <th className="py-2 px-2 font-medium text-center">PD</th>
+                                                                                <th className="py-2 px-2 text-center font-medium">MP</th>
+                                                                                <th className="py-2 px-2 text-center font-medium">W</th>
+                                                                                <th className="py-2 px-2 text-center font-medium">L</th>
+                                                                                <th className="py-2 px-2 text-center font-medium">PF</th>
+                                                                                <th className="py-2 px-2 text-center font-medium">PA</th>
+                                                                                <th className="py-2 px-2 text-center font-medium">PD</th>
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody>
                                                                             {filteredTeams.map((team, index) => {
                                                                                 const isTop3 = index < 3;
-                                                                                const medalColors = ['text-amber-400', 'text-gray-300', 'text-amber-700'];
-                                                                                const bgColors = [
-                                                                                    'bg-amber-400/5',
-                                                                                    'bg-gray-300/5',
-                                                                                    'bg-amber-700/5',
-                                                                                ];
+                                                                                const medalClasses = ['text-amber-300', 'text-slate-300', 'text-amber-500'];
+                                                                                const rowClasses = ['bg-red-500/5', 'bg-white/5', 'bg-red-500/10'];
 
                                                                                 return (
                                                                                     <tr
-                                                                                        key={team.team_id}
-                                                                                        className={`border-b border-white/5 transition-colors hover:bg-white/[0.02] ${isTop3 ? bgColors[index] : ''}`}
+                                                                                        key={`${team.live_configuration_id}-${team.category_id}-${team.team_id}`}
+                                                                                        className={`border-b border-red-500/5 transition-colors hover:bg-red-500/5 ${isTop3 ? rowClasses[index] : ''}`}
                                                                                     >
                                                                                         <td className="py-2.5 pr-2">
                                                                                             {isTop3 ? (
-                                                                                                <span className={`flex items-center justify-center ${medalColors[index]}`}>
+                                                                                                <span className={`inline-flex items-center justify-center ${medalClasses[index]}`}>
                                                                                                     {index === 0 ? (
                                                                                                         <Trophy className="h-4 w-4" />
                                                                                                     ) : (
@@ -402,17 +427,17 @@ const startPolling = () => {
                                                                                                     )}
                                                                                                 </span>
                                                                                             ) : (
-                                                                                                <span className="text-gray-500">{team.rank}</span>
+                                                                                                <span className="text-slate-500">{team.rank}</span>
                                                                                             )}
                                                                                         </td>
-                                                                                        <td className="max-w-[140px] truncate px-2 font-medium text-white sm:max-w-[200px]">
+                                                                                        <td className="max-w-[180px] truncate px-2 font-medium text-white sm:max-w-[220px]">
                                                                                             {team.team_name}
                                                                                         </td>
-                                                                                        <td className="px-2 text-center text-gray-400">{team.matches_played}</td>
+                                                                                        <td className="px-2 text-center text-slate-300">{team.matches_played}</td>
                                                                                         <td className="px-2 text-center text-emerald-400">{team.wins}</td>
                                                                                         <td className="px-2 text-center text-red-400">{team.losses}</td>
-                                                                                        <td className="px-2 text-center text-gray-300">{team.points_for}</td>
-                                                                                        <td className="px-2 text-center text-gray-300">{team.points_against}</td>
+                                                                                        <td className="px-2 text-center text-slate-200">{team.points_for}</td>
+                                                                                        <td className="px-2 text-center text-slate-200">{team.points_against}</td>
                                                                                         <td className="px-2 text-center">
                                                                                             <span
                                                                                                 className={`inline-flex items-center gap-0.5 ${
@@ -420,7 +445,7 @@ const startPolling = () => {
                                                                                                         ? 'text-emerald-400'
                                                                                                         : team.point_differential < 0
                                                                                                           ? 'text-red-400'
-                                                                                                          : 'text-gray-400'
+                                                                                                          : 'text-slate-400'
                                                                                                 }`}
                                                                                             >
                                                                                                 {team.point_differential > 0 ? (
@@ -452,12 +477,11 @@ const startPolling = () => {
                         })}
                     </div>
 
-                    {/* Footer */}
-                    <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-4 text-xs text-gray-600">
-                        <span>GameCore Live Standings</span>
+                    <div className="mt-8 flex items-center justify-between border-t border-red-500/10 pt-4 text-xs text-slate-500">
+                        <span className="flex items-center gap-2"><AppLogoIcon className="h-4 w-4" />GameCore Live Standings</span>
                         <div className="flex items-center gap-2">
                             {isPolling && (
-                                <RefreshCw className="h-3 w-3 animate-spin" />
+                                <RefreshCw className="h-3 w-3 animate-spin text-red-300" />
                             )}
                             <Clock className="h-3 w-3" />
                             <span>Updated {timeAgo(lastUpdated)}</span>

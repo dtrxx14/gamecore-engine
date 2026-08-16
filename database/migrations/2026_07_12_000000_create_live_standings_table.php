@@ -23,8 +23,6 @@ return new class extends Migration
             $table->unsignedInteger('points_against')->default(0);
             $table->integer('point_differential')->default(0);
             $table->timestamps();
-
-            $table->unique(['live_configuration_id', 'category_id', 'team_id'], 'unique_standing');
         });
     }
 

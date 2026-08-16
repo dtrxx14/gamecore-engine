@@ -250,7 +250,7 @@ export default function CreateTournament({
                     team_size: cat.team_size,
                     team_type: cat.team_type,
 
-formats: (cat.formats ?? []).map((format) => ({
+                    formats: (cat.formats ?? []).map((format) => ({
                         round_format: format.round_format,
                         competition_format: format.competition_format,
                         scoring_format: format.scoring_format,

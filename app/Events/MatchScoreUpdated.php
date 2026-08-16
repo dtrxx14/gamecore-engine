@@ -19,6 +19,16 @@ class MatchScoreUpdated implements ShouldBroadcast
     public int $configurationId;
 
     /**
+     * The current umpire assignment ID.
+     */
+    public ?int $umpireId;
+
+    /**
+     * The previous umpire assignment ID, used when reassigning or removing a match.
+     */
+    public ?int $oldUmpireId;
+
+    /**
      * The match data payload.
      */
     public array $match;
@@ -26,9 +36,11 @@ class MatchScoreUpdated implements ShouldBroadcast
     /**
      * Create a new event instance.
      */
-    public function __construct(LiveConfiguration $configuration, array $match)
+    public function __construct(LiveConfiguration $configuration, array $match, ?int $oldUmpireId = null)
     {
         $this->configurationId = $configuration->id;
+        $this->umpireId = $match['umpire_id'] ?? null;
+        $this->oldUmpireId = $match['old_umpire_id'] ?? $oldUmpireId;
         $this->match = $match;
     }
 
@@ -39,9 +51,13 @@ class MatchScoreUpdated implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        return [
-            new Channel('courts.' . $this->configurationId),
-        ];
+        $channelNames = ['courts.' . $this->configurationId];
+
+        foreach (array_filter([$this->umpireId, $this->oldUmpireId]) as $umpireId) {
+            $channelNames[] = 'umpires.' . $umpireId;
+        }
+
+        return array_map(fn (string $channelName) => new Channel($channelName), array_values(array_unique($channelNames)));
     }
 
     /**

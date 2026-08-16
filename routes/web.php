@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\LiveConfigurationController;
 use App\Http\Controllers\Admin\PlayerImportController;
+use App\Http\Controllers\Admin\PlayerManagementController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\AdminOrganizerController;
 use App\Http\Controllers\Api\LocationController;
@@ -54,6 +55,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('admin/user-management/{user}/toggle-status', [UserManagementController::class, 'toggleStatus'])->name('admin.user-management.toggle-status');
         Route::post('admin/user-management/{user}/reset-password', [UserManagementController::class, 'resetPassword'])->name('admin.user-management.reset-password');
         Route::delete('admin/user-management/{user}', [UserManagementController::class, 'destroy'])->name('admin.user-management.destroy');
+
+        // Player management routes
+        Route::get('admin/player-management', [PlayerManagementController::class, 'index'])->name('admin.player-management.index');
+        Route::post('admin/player-management', [PlayerManagementController::class, 'store'])->name('admin.player-management.store');
+        Route::get('admin/player-management/{playerInformation}', [PlayerManagementController::class, 'show'])->name('admin.player-management.show');
+        Route::put('admin/player-management/{playerInformation}', [PlayerManagementController::class, 'update'])->name('admin.player-management.update');
+        Route::delete('admin/player-management/{playerInformation}/profile-image', [PlayerManagementController::class, 'removeProfileImage'])->name('admin.player-management.remove-profile-image');
+        Route::post('admin/player-management/{playerInformation}/send-password-reset-link', [PlayerManagementController::class, 'sendPasswordResetLink'])->name('admin.player-management.send-password-reset-link');
+        Route::post('admin/player-management/{playerInformation}/reset-password', [PlayerManagementController::class, 'resetPassword'])->name('admin.player-management.reset-password');
+        Route::delete('admin/player-management/{playerInformation}', [PlayerManagementController::class, 'destroy'])->name('admin.player-management.destroy');
 
         // API routes for organizer approval/rejection
         Route::post('api/organizer-approvals/{organization}/approve', [OrganizerApprovalController::class, 'approve']);
@@ -108,7 +119,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('umpire/match/{liveMatchScore}/summary', [UmpireDashboardController::class, 'showSummary'])->name('umpire.match.summary');
     });
 
-Route::middleware('approved.organizer')->group(function () {
+    Route::middleware('approved.organizer')->group(function () {
         Route::inertia('organizer/dashboard', 'organizer/dashboard')->name('organizer.dashboard');
 
         // Per-organization organizer admin dashboard (uuid-based)
@@ -125,7 +136,6 @@ Route::middleware('approved.organizer')->group(function () {
 
         Route::get('organizer/organizations/{organization}/tournaments/create', [TournamentController::class, 'show'])
             ->name('organizer.organization.tournaments.create');
-
 
         // Route::inertia('organizer/tournaments/create', 'organizer/create-tournament')->name('organizer.tournaments.create');
         Route::post('organizer/tournaments', [TournamentController::class, 'store'])->name('organizer.tournaments.store');

@@ -76,6 +76,9 @@ export default function UserManagement({ admins, filters }: Props) {
         editingId: null as number | null,
     });
     const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+    const [isSearching, setIsSearching] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isConfirming, setIsConfirming] = useState<number | null>(null);
 
     useEffect(() => {
         setSearch(filters.search);
@@ -88,6 +91,7 @@ export default function UserManagement({ admins, filters }: Props) {
     );
 
     const handleSearch = () => {
+        setIsSearching(true);
         updateList(1, perPage);
     };
 
@@ -107,7 +111,12 @@ export default function UserManagement({ admins, filters }: Props) {
         router.get(
             '/admin/user-management',
             { search, per_page: resolvedPerPage, page },
-            { preserveState: true, preserveScroll: true, replace: true }
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onFinish: () => setIsSearching(false),
+            }
         );
     };
 
@@ -130,20 +139,42 @@ export default function UserManagement({ admins, filters }: Props) {
 
     const submitForm = (event: React.FormEvent) => {
         event.preventDefault();
+        setIsSubmitting(true);
 
         if (modalMode === 'edit' && form.editingId) {
             router.put(`/admin/user-management/${form.editingId}`, {
                 account_number: form.account_number,
+            }, {
+                onSuccess: () => {
+                    closeModal();
+                    setIsSubmitting(false);
+                },
+                onError: () => {
+                    setIsSubmitting(false);
+                },
+                onFinish: () => {
+                    setIsSubmitting(false);
+                },
             });
-        } else {
-            router.post('/admin/user-management', {
-                email: form.email,
-                account_number: form.account_number,
-                password: form.password,
-            });
+            return;
         }
 
-        closeModal();
+        router.post('/admin/user-management', {
+            email: form.email,
+            account_number: form.account_number,
+            password: form.password,
+        }, {
+            onSuccess: () => {
+                closeModal();
+                setIsSubmitting(false);
+            },
+            onError: () => {
+                setIsSubmitting(false);
+            },
+            onFinish: () => {
+                setIsSubmitting(false);
+            },
+        });
     };
 
     const handleConfirmAction = (action: ConfirmAction) => {
@@ -157,16 +188,36 @@ return;
 
         const { type, user } = confirmAction;
 
+        setIsConfirming(user.id);
+
         if (type === 'reset-password') {
-            router.post(`/admin/user-management/${user.id}/reset-password`);
+            router.post(`/admin/user-management/${user.id}/reset-password`, {}, {
+                onFinish: () => {
+                    setIsConfirming(null);
+                    setConfirmAction(null);
+                },
+            });
+            return;
         }
 
         if (type === 'toggle-status') {
-            router.patch(`/admin/user-management/${user.id}/toggle-status`);
+            router.patch(`/admin/user-management/${user.id}/toggle-status`, {}, {
+                onFinish: () => {
+                    setIsConfirming(null);
+                    setConfirmAction(null);
+                },
+            });
+            return;
         }
 
         if (type === 'delete') {
-            router.delete(`/admin/user-management/${user.id}`);
+            router.delete(`/admin/user-management/${user.id}`, {
+                onFinish: () => {
+                    setIsConfirming(null);
+                    setConfirmAction(null);
+                },
+            });
+            return;
         }
 
         setConfirmAction(null);
@@ -197,7 +248,7 @@ return;
                 </div>
 
                 <div className="flex justify-end">
-                    <Button onClick={openCreateModal} className="inline-flex items-center gap-2">
+                    <Button onClick={openCreateModal} className="inline-flex items-center gap-2" disabled={isSubmitting}>
                         <Plus className="size-4" />
                         Add admin
                     </Button>
@@ -236,7 +287,7 @@ return;
                                     className="h-8 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                                 />
                             </div>
-                            <Button className="rounded-md" onClick={handleSearch}>Search</Button>
+                            <Button className="rounded-md" onClick={handleSearch} loading={isSearching} disabled={isSearching}>Search</Button>
                         </div>
                     </CardHeader>
 
@@ -430,10 +481,10 @@ return;
                         )}
 
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={closeModal}>
+                            <Button type="button" variant="outline" onClick={closeModal} disabled={isSubmitting}>
                                 Cancel
                             </Button>
-                            <Button type="submit">
+                            <Button type="submit" loading={isSubmitting}>
                                 {modalMode === 'create' ? 'Create admin' : 'Save changes'}
                             </Button>
                         </DialogFooter>
@@ -463,7 +514,7 @@ return;
                         <Button type="button" variant="outline" onClick={closeConfirm}>
                             Cancel
                         </Button>
-                        <Button type="button" className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={executeConfirm}>
+                        <Button type="button" className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={executeConfirm} loading={isConfirming !== null} disabled={isConfirming !== null}>
                             Confirm
                         </Button>
                     </DialogFooter>

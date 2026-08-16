@@ -57,7 +57,12 @@ const mainNavItems: NavItem[] = [
                 href: '/admin/organizer-approvals',
             },
         ],
-    }
+    },
+    {
+        title: 'Player Management',
+        href: '/admin/player-management',
+        icon: Folder,
+    },
 ];
 
 // const footerNavItems: NavItem[] = [

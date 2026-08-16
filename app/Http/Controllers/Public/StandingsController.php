@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\LiveConfiguration;
-use App\Models\LiveStanding;
 use App\Models\LiveMatchScore;
+use App\Models\LiveStanding;
 use App\Models\LiveTeam;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class StandingsController extends Controller
 {
@@ -38,7 +38,7 @@ class StandingsController extends Controller
         ]);
     }
 
-/**
+    /**
      * Display the public standings page for a specific configuration by slug.
      */
     public function show(string $slug)
@@ -101,7 +101,7 @@ class StandingsController extends Controller
         ]);
     }
 
-/**
+    /**
      * Build standings data for a single configuration (used by slug-based pages).
      */
     private function buildStandingsDataForConfig(LiveConfiguration $config): array
@@ -109,6 +109,7 @@ class StandingsController extends Controller
         $config->load(['categories', 'categories.teams']);
 
         $configData = [
+            'live_configuration_id' => $config->id,
             'configuration_id' => $config->id,
             'configuration_name' => $config->name,
             'scoring_system' => $config->scoring_system,
@@ -120,9 +121,19 @@ class StandingsController extends Controller
             $standings = LiveStanding::query()
                 ->where('live_configuration_id', $config->id)
                 ->where('category_id', $category->id)
-                ->orderBy('wins', 'desc')
-                ->orderBy('point_differential', 'desc')
-                ->orderBy('points_for', 'desc')
+                ->groupBy('team_id')
+                ->select([
+                    'team_id',
+                    DB::raw('SUM(matches_played) as matches_played'),
+                    DB::raw('SUM(wins) as wins'),
+                    DB::raw('SUM(losses) as losses'),
+                    DB::raw('SUM(points_for) as points_for'),
+                    DB::raw('SUM(points_against) as points_against'),
+                    DB::raw('SUM(point_differential) as point_differential'),
+                ])
+                ->orderByRaw('SUM(wins) DESC')
+                ->orderByRaw('SUM(point_differential) DESC')
+                ->orderByRaw('SUM(points_for) DESC')
                 ->get();
 
             $teams = [];
@@ -130,21 +141,25 @@ class StandingsController extends Controller
 
             foreach ($standings as $standing) {
                 $team = LiveTeam::find($standing->team_id);
-                if (!$team) continue;
+                if (! $team) {
+                    continue;
+                }
 
                 // Get court number from the most recent match
                 $latestMatch = LiveMatchScore::query()
                     ->where('live_configuration_id', $config->id)
                     ->where(function ($q) use ($standing) {
                         $q->where('team_a_id', $standing->team_id)
-                          ->orWhere('team_b_id', $standing->team_id);
+                            ->orWhere('team_b_id', $standing->team_id);
                     })
                     ->latest()
                     ->first();
 
                 $teams[] = [
-                    'rank' => $rank,
+                    'live_configuration_id' => $config->id,
+                    'category_id' => $category->id,
                     'team_id' => $standing->team_id,
+                    'rank' => $rank,
                     'team_name' => $team->name,
                     'court_number' => $latestMatch->court_number ?? 0,
                     'matches_played' => $standing->matches_played,
@@ -159,6 +174,7 @@ class StandingsController extends Controller
             }
 
             $configData['categories'][] = [
+                'live_configuration_id' => $config->id,
                 'category_id' => $category->id,
                 'category_name' => $category->name,
                 'game_to' => $category->game_to ?? 21,

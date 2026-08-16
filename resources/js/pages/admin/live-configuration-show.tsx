@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import echo from '@/echo';
 import {
     Activity,
     ArrowLeft,
@@ -69,6 +70,8 @@ interface LiveMatchScore {
     team_a_score: number;
     team_b_score: number;
     serving_team: 'team_a' | 'team_b' | null;
+    service_number: number | null;
+    rally_count: number | null;
     next_team_a_id: number | null;
     next_team_b_id: number | null;
     umpire_id: number | null;
@@ -130,11 +133,14 @@ interface Props {
     standings: Record<string, Standing[]>;
 }
 
-export default function LiveConfigurationShow({ configuration, teams, statuses, players, umpires, standings }: Props) {
+export default function LiveConfigurationShow({ configuration: initialConfiguration, teams, statuses, players, umpires, standings: initialStandings }: Props) {
+    const [configuration, setConfiguration] = useState<LiveConfigurationData>(initialConfiguration);
+    const [standings, setStandings] = useState<Record<string, Standing[]>>(initialStandings);
+
     // ---- Category state ----
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<LiveCategory | null>(null);
-    const [categoryForm, setCategoryForm] = useState({ name: '', game_to: '21', game_time: '', game_interval: '' });
+    const [categoryForm, setCategoryForm] = useState({ name: '', game_to: '11', game_time: '', game_interval: '' });
     const [categoryErrors, setCategoryErrors] = useState<Record<string, string>>({});
 
     // ---- Team state ----
@@ -163,6 +169,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
         status_id: '27',
     });
     const [courtErrors, setCourtErrors] = useState<Record<string, string>>({});
+    const [courtSaving, setCourtSaving] = useState(false);
 
     // ---- Remove confirmations ----
     const [removeCourtTarget, setRemoveCourtTarget] = useState<LiveMatchScore | null>(null);
@@ -173,6 +180,123 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
     const [removeCategoryOpen, setRemoveCategoryOpen] = useState(false);
 
     const activeStatus = statuses.find((s) => s.slug === 'active');
+    const completedStatusId = statuses.find((s) => s.slug === 'completed')?.id;
+    const playingStatusId = statuses.find((s) => s.slug === 'playing')?.id;
+
+    const getStatusById = (statusId: number | null | undefined) => {
+        if (statusId === null || statusId === undefined || statusId === 0) {
+            return null;
+        }
+
+        return statuses.find((status) => Number(status.id) === Number(statusId)) ?? null;
+    };
+
+    useEffect(() => {
+        setConfiguration(initialConfiguration);
+    }, [initialConfiguration]);
+
+    useEffect(() => {
+        setStandings(initialStandings);
+    }, [initialStandings]);
+
+    useEffect(() => {
+        const channel = echo.channel(`courts.${configuration.id}`);
+        const standingsChannel = echo.channel(`standings.${configuration.id}`);
+
+        const handleMatchUpdate = (event: any) => {
+            const match = event?.match;
+            if (!match) {
+                return;
+            }
+
+            setConfiguration((prev) => {
+                const currentScores = prev.match_scores ?? [];
+                const courtMatch = currentScores.find((item) => item.court_number === match.court_number);
+                const nextScores = currentScores.filter((item) => item.court_number !== match.court_number);
+
+                const hasStarted = Boolean(match.start_play_at) && !match.end_play_at;
+                const hasEnded = Boolean(match.end_play_at) || Boolean(match.completed_at);
+                const incomingStatusId = Number(match.status_id ?? courtMatch?.status_id ?? (hasStarted ? (playingStatusId ?? 0) : 0));
+                const incomingStatus = getStatusById(incomingStatusId) ?? courtMatch?.status ?? null;
+                const isCompletedMatch =
+                    match.deleted ||
+                    hasEnded ||
+                    (incomingStatus && incomingStatus.slug === 'completed') ||
+                    (completedStatusId && Number(match.status_id ?? 0) === Number(completedStatusId));
+
+                if (isCompletedMatch) {
+                    return {
+                        ...prev,
+                        match_scores: nextScores,
+                    };
+                }
+
+                const updatedMatch: LiveMatchScore = {
+                    ...(courtMatch ?? {}),
+                    id: match.id ?? courtMatch?.id ?? 0,
+                    live_configuration_id: match.live_configuration_id ?? prev.id,
+                    court_number: match.court_number ?? courtMatch?.court_number ?? 0,
+                    category_id: match.category_id ?? courtMatch?.category_id ?? null,
+                    next_category_id: match.next_category_id ?? courtMatch?.next_category_id ?? null,
+                    team_a_id: match.team_a_id ?? courtMatch?.team_a_id ?? null,
+                    team_b_id: match.team_b_id ?? courtMatch?.team_b_id ?? null,
+                    team_a_score: match.team_a_score ?? courtMatch?.team_a_score ?? 0,
+                    team_b_score: match.team_b_score ?? courtMatch?.team_b_score ?? 0,
+                    serving_team: match.serving_team ?? courtMatch?.serving_team ?? null,
+                    service_number: match.service_number ?? courtMatch?.service_number ?? null,
+                    rally_count: match.rally_count ?? courtMatch?.rally_count ?? null,
+                    next_team_a_id: match.next_team_a_id ?? courtMatch?.next_team_a_id ?? null,
+                    next_team_b_id: match.next_team_b_id ?? courtMatch?.next_team_b_id ?? null,
+                    umpire_id: match.umpire_id ?? courtMatch?.umpire_id ?? null,
+                    status_id: incomingStatusId,
+                    team_a: match.team_a ?? courtMatch?.team_a ?? null,
+                    team_b: match.team_b ?? courtMatch?.team_b ?? null,
+                    next_team_a: match.next_team_a ?? courtMatch?.next_team_a ?? null,
+                    next_team_b: match.next_team_b ?? courtMatch?.next_team_b ?? null,
+                    umpire: match.umpire ?? courtMatch?.umpire ?? null,
+                    status: incomingStatus,
+                    category: match.category ?? courtMatch?.category ?? null,
+                    nextCategory: match.nextCategory ?? courtMatch?.nextCategory ?? null,
+                };
+
+                const mergedScores = [...nextScores, updatedMatch].sort((a, b) => a.court_number - b.court_number);
+
+                return {
+                    ...prev,
+                    match_scores: mergedScores,
+                };
+            });
+        };
+
+        standingsChannel.listen('.standings.updated', (event: any) => {
+            const nextStandings = event?.standings ?? event?.data ?? null;
+            const normalized = Array.isArray(nextStandings)
+                ? nextStandings.reduce<Record<string, Standing[]>>((acc, category) => {
+                    const categoryKey = category?.category_id ?? category?.id;
+                    if (categoryKey === undefined || categoryKey === null) {
+                        return acc;
+                    }
+                    acc[String(categoryKey)] = Array.isArray(category?.teams) ? category.teams : [];
+                    return acc;
+                }, {})
+                : nextStandings && typeof nextStandings === 'object'
+                    ? nextStandings as Record<string, Standing[]>
+                    : null;
+
+            if (normalized) {
+                setStandings(normalized);
+            }
+        });
+
+        channel.listen('.match.score.updated', handleMatchUpdate);
+
+        return () => {
+            channel.stopListening('.match.score.updated');
+            standingsChannel.stopListening('.standings.updated');
+            echo.leave(channel.name);
+            echo.leave(standingsChannel.name);
+        };
+    }, [completedStatusId, configuration.id, playingStatusId, statuses]);
 
     // ---- Derived data ----
     const selectedCategoryId = courtForm.category_id ? Number(courtForm.category_id) : null;
@@ -223,7 +347,7 @@ export default function LiveConfigurationShow({ configuration, teams, statuses, 
             });
         } else {
             setEditingCategory(null);
-            setCategoryForm({ name: '', game_to: '21', game_time: '', game_interval: '' });
+            setCategoryForm({ name: '', game_to: '11', game_time: '', game_interval: '' });
         }
         setCategoryErrors({});
         setCategoryModalOpen(true);
@@ -396,6 +520,8 @@ if (teamA && teamB && teamA === teamB) {
 
         const nextCategoryId = courtForm.next_category_id ? Number(courtForm.next_category_id) : null;
 
+        setCourtSaving(true);
+
         router.post('/admin/live-configuration/match-scores', {
             id: activeCourt && getMatchForCourt(activeCourt)?.id ? getMatchForCourt(activeCourt)?.id : null,
             live_configuration_id: configuration.id,
@@ -408,7 +534,20 @@ if (teamA && teamB && teamA === teamB) {
             next_team_b_id: nextB,
             umpire_id: courtForm.umpire_id ? Number(courtForm.umpire_id) : null,
             status_id: Number(courtForm.status_id),
-        }, { preserveScroll: true, onSuccess: () => setCourtModalOpen(false) });
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setCourtModalOpen(false);
+                setCourtSaving(false);
+            },
+            onError: (errors) => {
+                setCourtErrors(errors as Record<string, string>);
+                setCourtSaving(false);
+            },
+            onFinish: () => {
+                setCourtSaving(false);
+            },
+        });
     };
 
     const confirmRemoveCourt = (match: LiveMatchScore) => {
@@ -466,6 +605,42 @@ if (teamA && teamB && teamA === teamB) {
             >
                 {isActive ? 'Active' : 'Inactive'}
             </Badge>
+        );
+    };
+
+    const renderServingIndicator = (team: 'team_a' | 'team_b', match: LiveMatchScore) => {
+        if (!match.serving_team || configuration.scoring_system !== 'side-out') {
+            return match.serving_team === team ? (
+                <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 ring-1 ring-green-300" />
+            ) : (
+                <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/20" />
+            );
+        }
+
+        const isServing = match.serving_team === team;
+
+        if (!isServing) {
+            return (
+                <div className="flex flex-col items-center gap-0.5 opacity-40">
+                    <div className="flex gap-1">
+                        <span className="h-3 w-3 rounded-full border-2 border-red-500/30 dark:border-white/30" />
+                        <span className="h-3 w-3 rounded-full border-2 border-red-500/30 dark:border-white/30" />
+                    </div>
+                </div>
+            );
+        }
+
+        const serviceNumber = Number(match.service_number ?? 1);
+        const firstServerActive = serviceNumber >= 1;
+        const secondServerActive = serviceNumber === 2;
+
+        return (
+            <div className="flex flex-col items-center gap-0.5">
+                <div className="flex gap-1">
+                    <span className={`h-3 w-3 rounded-full ${firstServerActive ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                    <span className={`h-3 w-3 rounded-full ${secondServerActive ? 'bg-red-500 dark:bg-white' : 'border-2 border-red-500/40 dark:border-white/40'}`} />
+                </div>
+            </div>
         );
     };
 
@@ -899,11 +1074,7 @@ if (teamA && teamB && teamA === teamB) {
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-[10px] font-bold text-blue-600 dark:text-blue-400">A</div>
                                                     <span className="truncate text-sm font-medium text-foreground">{getTeamName(match.team_a_id)}</span>
-                                                    {match.serving_team === 'team_a' ? (
-                                                        <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 ring-1 ring-green-300" />
-                                                    ) : (
-                                                        <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/20" />
-                                                    )}
+                                                    {renderServingIndicator('team_a', match)}
                                                 </div>
                                                 <span className="ml-2 text-lg font-bold text-foreground">{match.team_a_score ?? 0}</span>
                                             </div>
@@ -918,11 +1089,7 @@ if (teamA && teamB && teamA === teamB) {
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-500/10 text-[10px] font-bold text-purple-600 dark:text-purple-400">B</div>
                                                     <span className="truncate text-sm font-medium text-foreground">{getTeamName(match.team_b_id)}</span>
-                                                    {match.serving_team === 'team_b' ? (
-                                                        <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 ring-1 ring-green-300" />
-                                                    ) : (
-                                                        <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/20" />
-                                                    )}
+                                                    {renderServingIndicator('team_b', match)}
                                                 </div>
                                                 <span className="ml-2 text-lg font-bold text-foreground">{match.team_b_score ?? 0}</span>
                                             </div>
@@ -1090,171 +1257,186 @@ if (teamA && teamB && teamA === teamB) {
 
             {/* ============ Court Match Dialog ============ */}
             <Dialog open={courtModalOpen} onOpenChange={setCourtModalOpen}>
-                <DialogContent className="sm:max-w-md max-h-[85vh]">
-                    <DialogHeader>
-                        <DialogTitle>Court {activeCourt} — Assign match</DialogTitle>
-                        <DialogDescription>
-                            Select a category first, then choose teams within that category. Optionally set a next category and next teams for the queue.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 p-4 h-100 overflow-y-auto">
-                        {/* Category dropdown (required) */}
-                        <div>
-                            <Label htmlFor="court-category" className="text-sm font-medium">
-                                Category <span className="text-destructive">*</span>
-                            </Label>
-                            <select
-                                id="court-category"
-                                value={courtForm.category_id}
-                                onChange={(e) => {
-                                    setCourtForm((prev) => ({
-                                        ...prev,
-                                        category_id: e.target.value,
-                                        team_a_id: '',
-                                        team_b_id: '',
-                                    }));
-                                }}
-                                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
-                            >
-                                <option value="">Select category</option>
-                                {(configuration.categories ?? []).map((cat) => (
-                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                ))}
-                            </select>
-                            {courtErrors.category_id && <p className="mt-1 text-sm text-destructive">{courtErrors.category_id}</p>}
-                        </div>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden border-red-500/20 bg-gradient-to-b from-background via-background to-background p-0">
+                    <div className="border-b border-border/60 bg-gradient-to-r from-red-600/10 via-red-500/5 to-red-500/5 p-5">
+                        <DialogHeader className="space-y-3">
+                            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-red-600 dark:text-red-400">
+                                <Swords className="h-3.5 w-3.5" />
+                                Court {activeCourt}
+                            </div>
+                            <DialogTitle className="text-xl font-semibold text-foreground">Assign match</DialogTitle>
+                            <DialogDescription className="text-sm text-muted-foreground">
+                                Choose the active category, teams, optional next queue, and umpire for this court.
+                            </DialogDescription>
+                        </DialogHeader>
+                    </div>
 
-                        {/* Team A - filtered by category */}
-                        <div>
-                            <Label htmlFor="court-team-a" className="text-sm font-medium">Team A <span className="text-destructive">*</span></Label>
-                            <select
-                                id="court-team-a"
-                                value={courtForm.team_a_id}
-                                onChange={(e) => setCourtForm((prev) => ({ ...prev, team_a_id: e.target.value }))}
-                                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
-                            >
-                                <option value="">Select team</option>
-                                {teamsInSelectedCategory.map((team) => (
-                                    <option key={team.id} value={team.id}>{team.name}</option>
-                                ))}
-                            </select>
-                            {courtErrors.team_a_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_a_id}</p>}
-                        </div>
-
-                        {/* Team B - filtered by category */}
-                        <div>
-                            <Label htmlFor="court-team-b" className="text-sm font-medium">Team B <span className="text-destructive">*</span></Label>
-                            <select
-                                id="court-team-b"
-                                value={courtForm.team_b_id}
-                                onChange={(e) => setCourtForm((prev) => ({ ...prev, team_b_id: e.target.value }))}
-                                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
-                            >
-                                <option value="">Select team</option>
-                                {teamsForTeamB.map((team) => (
-                                    <option key={team.id} value={team.id}>{team.name}</option>
-                                ))}
-                            </select>
-                            {courtErrors.team_b_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_b_id}</p>}
-                        </div>
-
-                        {/* ---- Next Category (optional) ---- */}
-                        <div className="border-t border-border/40 pt-4">
-                            <div>
-                                <Label htmlFor="court-next-category" className="text-sm font-medium">
-                                    Next Category (queue)
+                    <div className="space-y-5 overflow-y-auto p-5">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="md:col-span-2">
+                                <Label htmlFor="court-category" className="text-sm font-medium">
+                                    Category <span className="text-destructive">*</span>
                                 </Label>
                                 <select
-                                    id="court-next-category"
-                                    value={courtForm.next_category_id}
+                                    id="court-category"
+                                    value={courtForm.category_id}
                                     onChange={(e) => {
                                         setCourtForm((prev) => ({
                                             ...prev,
-                                            next_category_id: e.target.value,
-                                            next_team_a_id: '',
-                                            next_team_b_id: '',
+                                            category_id: e.target.value,
+                                            team_a_id: '',
+                                            team_b_id: '',
                                         }));
                                     }}
-                                    className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
+                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
                                 >
-                                    <option value="">No next category</option>
+                                    <option value="">Select category</option>
                                     {(configuration.categories ?? []).map((cat) => (
                                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                                     ))}
                                 </select>
+                                {courtErrors.category_id && <p className="mt-1 text-sm text-destructive">{courtErrors.category_id}</p>}
+                            </div>
+
+                            <div>
+                                <Label htmlFor="court-team-a" className="text-sm font-medium">Team A <span className="text-destructive">*</span></Label>
+                                <select
+                                    id="court-team-a"
+                                    value={courtForm.team_a_id}
+                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, team_a_id: e.target.value }))}
+                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                >
+                                    <option value="">Select team</option>
+                                    {teamsInSelectedCategory.map((team) => (
+                                        <option key={team.id} value={team.id}>{team.name}</option>
+                                    ))}
+                                </select>
+                                {courtErrors.team_a_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_a_id}</p>}
+                            </div>
+
+                            <div>
+                                <Label htmlFor="court-team-b" className="text-sm font-medium">Team B <span className="text-destructive">*</span></Label>
+                                <select
+                                    id="court-team-b"
+                                    value={courtForm.team_b_id}
+                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, team_b_id: e.target.value }))}
+                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                >
+                                    <option value="">Select team</option>
+                                    {teamsForTeamB.map((team) => (
+                                        <option key={team.id} value={team.id}>{team.name}</option>
+                                    ))}
+                                </select>
+                                {courtErrors.team_b_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_b_id}</p>}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <Label htmlFor="court-umpire" className="text-sm font-medium">Umpire</Label>
+                                <select
+                                    id="court-umpire"
+                                    value={courtForm.umpire_id}
+                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, umpire_id: e.target.value }))}
+                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                >
+                                    <option value="">No umpire assigned</option>
+                                    {umpires.map((umpire) => (
+                                        <option key={umpire.id} value={umpire.id}>
+                                            {umpire.first_name} {umpire.last_name} ({umpire.email})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <Label htmlFor="court-status" className="text-sm font-medium">Status <span className="text-destructive">*</span></Label>
+                                <select
+                                    id="court-status"
+                                    value={courtForm.status_id}
+                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, status_id: e.target.value }))}
+                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                >
+                                    <option value="">Select status</option>
+                                    {statuses.map((status) => (
+                                        <option key={status.id} value={status.id}>{status.name}</option>
+                                    ))}
+                                </select>
+                                {courtErrors.status_id && <p className="mt-1 text-sm text-destructive">{courtErrors.status_id}</p>}
                             </div>
                         </div>
 
-                        {/* Next Team A - filtered by next category */}
-                        <div>
-                            <Label htmlFor="court-next-team-a" className="text-sm font-medium">Next Team A (queue)</Label>
-                            <select
-                                id="court-next-team-a"
-                                value={courtForm.next_team_a_id}
-                                onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_a_id: e.target.value }))}
-                                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
-                            >
-                                <option value="">No next team</option>
-                                {teamsForNextA.map((team) => (
-                                    <option key={team.id} value={team.id}>{team.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                        <div className="rounded-xl border border-border/60 bg-muted/90 p-4">
+                            <div className="mb-3 flex items-center gap-2">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-red-500/10 text-red-600 dark:text-red-400">
+                                    <Play className="h-3.5 w-3.5" />
+                                </div>
+                                <h3 className="text-sm font-semibold text-foreground">Next queue</h3>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="md:col-span-2">
+                                    <Label htmlFor="court-next-category" className="text-sm font-medium">Next category</Label>
+                                    <select
+                                        id="court-next-category"
+                                        value={courtForm.next_category_id}
+                                        onChange={(e) => {
+                                            setCourtForm((prev) => ({
+                                                ...prev,
+                                                next_category_id: e.target.value,
+                                                next_team_a_id: '',
+                                                next_team_b_id: '',
+                                            }));
+                                        }}
+                                        className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                    >
+                                        <option value="">No next category</option>
+                                        {(configuration.categories ?? []).map((cat) => (
+                                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                        {/* Next Team B - filtered by next category */}
-                        <div>
-                            <Label htmlFor="court-next-team-b" className="text-sm font-medium">Next Team B (queue)</Label>
-                            <select
-                                id="court-next-team-b"
-                                value={courtForm.next_team_b_id}
-                                onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_b_id: e.target.value }))}
-                                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
-                            >
-                                <option value="">No next team</option>
-                                {teamsForNextB.map((team) => (
-                                    <option key={team.id} value={team.id}>{team.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                                <div>
+                                    <Label htmlFor="court-next-team-a" className="text-sm font-medium">Next Team A</Label>
+                                    <select
+                                        id="court-next-team-a"
+                                        value={courtForm.next_team_a_id}
+                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_a_id: e.target.value }))}
+                                        className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                    >
+                                        <option value="">No next team</option>
+                                        {teamsForNextA.map((team) => (
+                                            <option key={team.id} value={team.id}>{team.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                        {/* Umpire */}
-                        <div>
-                            <Label htmlFor="court-umpire" className="text-sm font-medium">Umpire</Label>
-                            <select
-                                id="court-umpire"
-                                value={courtForm.umpire_id}
-                                onChange={(e) => setCourtForm((prev) => ({ ...prev, umpire_id: e.target.value }))}
-                                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
-                            >
-                                <option value="">No umpire assigned</option>
-                                {umpires.map((umpire) => (
-                                    <option key={umpire.id} value={umpire.id}>
-                                        {umpire.first_name} {umpire.last_name} ({umpire.email})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Status */}
-                        <div>
-                            <Label htmlFor="court-status" className="text-sm font-medium">Status <span className="text-destructive">*</span></Label>
-                            <select
-                                id="court-status"
-                                value={courtForm.status_id}
-                                onChange={(e) => setCourtForm((prev) => ({ ...prev, status_id: e.target.value }))}
-                                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-none outline-none transition-colors focus-visible:border-primary/50"
-                            >
-                                <option value="">Select status</option>
-                                {statuses.map((status) => (
-                                    <option key={status.id} value={status.id}>{status.name}</option>
-                                ))}
-                            </select>
-                            {courtErrors.status_id && <p className="mt-1 text-sm text-destructive">{courtErrors.status_id}</p>}
+                                <div>
+                                    <Label htmlFor="court-next-team-b" className="text-sm font-medium">Next Team B</Label>
+                                    <select
+                                        id="court-next-team-b"
+                                        value={courtForm.next_team_b_id}
+                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_b_id: e.target.value }))}
+                                        className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                    >
+                                        <option value="">No next team</option>
+                                        {teamsForNextB.map((team) => (
+                                            <option key={team.id} value={team.id}>{team.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <DialogFooter className="sm:justify-end">
-                        <Button variant="outline" onClick={() => setCourtModalOpen(false)}>Cancel</Button>
-                        <Button onClick={saveCourtMatch}>Add match</Button>
+
+                    <DialogFooter className="border-t border-border/60 bg-muted/20 px-5 py-4 sm:justify-end">
+                        <Button variant="outline" onClick={() => setCourtModalOpen(false)} disabled={courtSaving}>Cancel</Button>
+                        <Button
+                            onClick={saveCourtMatch}
+                            loading={courtSaving}
+                            disabled={courtSaving}
+                            className="bg-gradient-to-r from-red-600 to-red-500 text-white shadow-sm hover:opacity-95"
+                        >
+                            Save assignment
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

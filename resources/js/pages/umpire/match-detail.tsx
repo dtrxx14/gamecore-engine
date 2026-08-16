@@ -87,7 +87,7 @@ type CoinTossPhase =
     | 'result'
     | 'choose_winner'
     | 'choose_option'
-| 'choose_serve'
+    | 'choose_serve'
     | 'choose_court'
     | 'complete';
 
@@ -105,15 +105,15 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
         (initialPhase === 'setup' || initialPhase === 'playing' || initialPhase === 'paused');
     const [teamAVerified, setTeamAVerified] = useState(initialPhase !== 'setup');
     const [teamBVerified, setTeamBVerified] = useState(initialPhase !== 'setup');
-    const [teamAPlayersOpen, setTeamAPlayersOpen] = useState(false);
-    const [teamBPlayersOpen, setTeamBPlayersOpen] = useState(false);
+    const [teamAPlayersOpen, setTeamAPlayersOpen] = useState(true);
+    const [teamBPlayersOpen, setTeamBPlayersOpen] = useState(true);
     // Per-player verification state (used for side-out doubles - 2 player teams)
     const [teamAPlayersVerified, setTeamAPlayersVerified] = useState<Record<number, boolean>>({});
     const [teamBPlayersVerified, setTeamBPlayersVerified] = useState<Record<number, boolean>>({});
     const [bothTeamsPresent, setBothTeamsPresent] = useState(initialPhase !== 'setup');
     const [defaultTimerActive, setDefaultTimerActive] = useState(false);
     const [defaultTimerExpired, setDefaultTimerExpired] = useState(false);
-    const [defaultTimerSeconds, setDefaultTimerSeconds] = useState(3);
+    const [defaultTimerSeconds, setDefaultTimerSeconds] = useState(300);
     const [setupComplete, setSetupComplete] = useState(initialSetupComplete);
 
     // Coin toss state - if data already exists, skip to complete phase
@@ -922,7 +922,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
 
                 {/* PRE-GAME SETUP */}
                 {!isMatchLive && (
-                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 portrait:max-w-lg portrait:mx-auto landscape:max-w-2xl landscape:mx-auto w-full">
+                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 portrait:mx-auto landscape:mx-auto w-full">
                         {/* Match Info Card */}
                         <div className="rounded-xl border border-primary/10 bg-gradient-to-br from-background to-primary/5 p-4">
                             <div className="flex items-center justify-between mb-3">
@@ -968,7 +968,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                                             <button onClick={() => setTeamAPlayersOpen(!teamAPlayersOpen)} className="flex items-center gap-2 min-w-0">
                                                 {teamAPlayersOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                                                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">A</div>
-                                                <div className="min-w-0"><p className="text-sm font-medium truncate">{teamAName}</p><p className="text-[10px] text-muted-foreground">{match.team_a?.players?.length ?? match.team_a?.player_ids?.length ?? 0} player(s)</p></div>
+                                                <div className="min-w-0"><p className="text-sm font-medium truncate">{teamAName}</p><p className="text-[10px] flex justify-start text-muted-foreground">{match.team_a?.players?.length ?? match.team_a?.player_ids?.length ?? 0} player(s)</p></div>
                                             </button>
                                             {!usePlayerVerifyA ? (
                                                 <button onClick={() => { if (!bothTeamsPresent) setTeamAVerified(!teamAVerified); }} disabled={bothTeamsPresent} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${teamAVerified ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''}`}>
@@ -1022,7 +1022,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                                             <button onClick={() => setTeamBPlayersOpen(!teamBPlayersOpen)} className="flex items-center gap-2 min-w-0">
                                                 {teamBPlayersOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                                                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">B</div>
-                                                <div className="min-w-0"><p className="text-sm font-medium truncate">{teamBName}</p><p className="text-[10px] text-muted-foreground">{match.team_b?.players?.length ?? match.team_b?.player_ids?.length ?? 0} player(s)</p></div>
+                                                <div className="min-w-0"><p className="text-sm font-medium truncate">{teamBName}</p><p className="text-[10px] flex justify-start text-muted-foreground">{match.team_b?.players?.length ?? match.team_b?.player_ids?.length ?? 0} player(s)</p></div>
                                             </button>
                                             {!usePlayerVerifyB ? (
                                                 <button onClick={() => { if (!bothTeamsPresent) setTeamBVerified(!teamBVerified); }} disabled={bothTeamsPresent} className={`flex h-8 w-8 items-center justify-center rounded-full transition-all shrink-0 ml-2 ${teamBVerified ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'bg-muted/30 text-muted-foreground hover:bg-accent'} ${bothTeamsPresent ? 'opacity-60 cursor-not-allowed' : ''}`}>
@@ -1081,7 +1081,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                                         </button>
                                     </div>
                                     {!bothTeamsPresent && !defaultTimerActive && !defaultTimerExpired && (
-                                        <button onClick={() => { setDefaultTimerActive(true); setDefaultTimerSeconds(3); }} className="w-full flex items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors">
+                                        <button onClick={() => { setDefaultTimerActive(true); setDefaultTimerSeconds(300); }} className="w-full flex items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors">
                                             <Clock className="h-4 w-4" /> Start 5-min Default Timer
                                         </button>
                                     )}
@@ -1327,7 +1327,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                             {winner === 'team_a' ? teamAName : teamBName}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                            Score: {scores.team_a} - {scores.team_b} (Game to {match.category?.game_to ?? 21})
+                            Score: {scores.team_a} - {scores.team_b} (Game to {match.category?.game_to ?? 11})
                         </p>
                         <p className="mt-1 text-xs text-primary/60">
                             Has {winner === 'team_a' ? teamAName : teamBName} won the match?

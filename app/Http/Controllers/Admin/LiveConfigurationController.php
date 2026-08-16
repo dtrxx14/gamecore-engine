@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\MatchScoreUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\LiveCategory;
 use App\Models\LiveConfiguration;
@@ -394,9 +395,9 @@ class LiveConfigurationController extends Controller
             'status_id' => ['required', 'integer', 'exists:statuses,id'],
         ]);
 
-        LiveMatchScore::updateOrCreate(
+        $match = LiveMatchScore::updateOrCreate(
             [
-                'id' => $request->input('id'), // If an ID is provided, update that match score; otherwise, create a new one
+                'id' => $request->input('id'),
                 'live_configuration_id' => $validated['live_configuration_id'],
                 'court_number' => $validated['court_number'],
             ],
@@ -412,6 +413,8 @@ class LiveConfigurationController extends Controller
                 'status_id' => $validated['status_id'],
             ]
         );
+
+        $this->dispatchMatchScoreUpdate($match);
 
         return redirect()->back()->with('success', 'Match score updated successfully.');
     }
@@ -430,15 +433,68 @@ class LiveConfigurationController extends Controller
         ]);
 
         $liveMatchScore->update($validated);
+        $this->dispatchMatchScoreUpdate($liveMatchScore->fresh());
 
         return redirect()->back()->with('success', 'Match score updated successfully.');
     }
 
     public function destroyMatchScore(LiveMatchScore $liveMatchScore): RedirectResponse
     {
+        $previousUmpireId = $liveMatchScore->umpire_id;
         $liveMatchScore->delete();
 
+        $configuration = LiveConfiguration::find($liveMatchScore->live_configuration_id);
+        if ($configuration) {
+            broadcast(new MatchScoreUpdated($configuration, [
+                'live_configuration_id' => $configuration->id,
+                'court_number' => $liveMatchScore->court_number,
+                'team_a_score' => 0,
+                'team_b_score' => 0,
+                'serving_team' => null,
+                'umpire_id' => null,
+                'old_umpire_id' => $previousUmpireId,
+                'status_id' => null,
+                'time_remaining' => null,
+                'deleted' => true,
+            ]));
+        }
+
         return redirect()->back()->with('success', 'Match removed from court.');
+    }
+
+    protected function dispatchMatchScoreUpdate(LiveMatchScore $match): void
+    {
+        $configuration = $match->liveConfiguration()->first();
+        if (! $configuration) {
+            return;
+        }
+
+        $previousUmpireId = $match->getRawOriginal('umpire_id') !== null ? (int) $match->getRawOriginal('umpire_id') : null;
+
+        $matchData = [
+            'live_configuration_id' => $match->live_configuration_id,
+            'court_number' => $match->court_number,
+            'category_id' => $match->category_id,
+            'team_a_id' => $match->team_a_id,
+            'team_b_id' => $match->team_b_id,
+            'team_a_score' => $match->team_a_score,
+            'team_b_score' => $match->team_b_score,
+            'serving_team' => $match->serving_team,
+            'service_number' => $match->service_number,
+            'court_change_done' => $match->court_change_done,
+            'rally_count' => $match->rally_count,
+            'is_paused' => $match->is_paused,
+            'team_a_court' => $match->team_a_court,
+            'team_b_court' => $match->team_b_court,
+            'start_play_at' => $match->start_play_at?->toIso8601String(),
+            'end_play_at' => $match->end_play_at?->toIso8601String(),
+            'time_remaining' => null,
+            'umpire_id' => $match->umpire_id,
+            'old_umpire_id' => $previousUmpireId,
+            'status_id' => $match->status_id,
+        ];
+
+        broadcast(new MatchScoreUpdated($configuration, $matchData, $previousUmpireId));
     }
 }
 
