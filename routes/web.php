@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\PlayerImportController;
 use App\Http\Controllers\Admin\PlayerManagementController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\AdminOrganizerController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\OrganizerApprovalController;
 use App\Http\Controllers\OrganizationController;
@@ -45,7 +46,7 @@ Route::get('/api/countries/{countryId}/states', [LocationController::class, 'sta
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('role:admin')->group(function () {
-        Route::inertia('dashboard', 'dashboard')->name('dashboard');
+        Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
         Route::get('admin/organizer-approvals', [AdminOrganizerController::class, 'approvals'])->name('admin.organizer.approvals');
         Route::get('admin/organizer-management', [AdminOrganizerController::class, 'management'])->name('admin.organizer.management');
         Route::get('admin/organizer-management/{organization}', [AdminOrganizerController::class, 'show'])->name('admin.organizer.management.show');

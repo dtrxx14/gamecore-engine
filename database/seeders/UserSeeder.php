@@ -44,7 +44,7 @@ class UserSeeder extends Seeder
             User::create([
                 'email' => 'd14yamio@gmail.com',
                 'email_verified_at' => now(),
-                'password' => bcrypt('Test123!'),
+                'password' => bcrypt('D1u9n9e7!'),
                 'role_id' => $adminRole->id,
                 'status_id' => 1,
                 'is_organizer' => false,

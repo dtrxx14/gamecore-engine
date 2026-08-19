@@ -246,7 +246,7 @@ class PlayerImport
      */
     protected function getOrCreateTeam(string $teamName, LiveCategory $category, int $userId): LiveTeam
     {
-// Look for existing team with same name in this category and configuration
+        // Look for existing team with same name in this category and configuration
         $team = LiveTeam::where('name', $teamName)
             ->where('category_id', $category->id)
             ->where('live_configuration_id', $this->liveConfigurationId)
