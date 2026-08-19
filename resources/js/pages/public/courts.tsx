@@ -336,7 +336,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
         const isSetup = court.phase === 'setup';
         const isSideOut = scoringSystem === 'side-out';
 
-const getTeamInitials = (name: string) => {
+        const getTeamInitials = (name: string) => {
             return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
         };
 
@@ -427,6 +427,11 @@ const getTeamInitials = (name: string) => {
                                 FINISHED
                             </span>
                         )}
+                        {isSetup && (
+                            <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold text-amber-500">
+                                UPCOMING
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -437,7 +442,7 @@ const getTeamInitials = (name: string) => {
                     </div>
                 ) : (
                     <div className="relative p-3 space-y-3">
-{/* Team A */}
+                        {/* Team A */}
                         <div className={`relative rounded-xl p-3 transition-all ${
                             court.serving_team === 'team_a'
                                 ? 'bg-primary/15 ring-1 ring-primary/30'

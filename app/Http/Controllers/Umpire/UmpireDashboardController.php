@@ -846,13 +846,9 @@ class UmpireDashboardController extends Controller
                     DB::raw('SUM(points_against) as points_against'),
                     DB::raw('SUM(point_differential) as point_differential'),
                 ])
-                ->orderByRaw('SUM(wins) DESC')
-                ->orderByRaw('SUM(point_differential) DESC')
-                ->orderByRaw('SUM(points_for) DESC')
                 ->get();
 
             $teams = [];
-            $rank = 1;
 
             foreach ($standings as $standing) {
                 $team = LiveTeam::find($standing->team_id);
@@ -872,7 +868,6 @@ class UmpireDashboardController extends Controller
                 $teams[] = [
                     'live_configuration_id' => $config->id,
                     'category_id' => $category->id,
-                    'rank' => $rank,
                     'team_id' => $standing->team_id,
                     'team_name' => $team->name,
                     'court_number' => $latestMatch->court_number ?? 0,
@@ -883,8 +878,29 @@ class UmpireDashboardController extends Controller
                     'points_against' => (int) $standing->points_against,
                     'point_differential' => (int) $standing->point_differential,
                 ];
+            }
 
-                $rank++;
+            $headToHeadRecords = $this->buildHeadToHeadRecords($teams, $config->id, $category->id);
+
+            usort($teams, function (array $left, array $right) use ($headToHeadRecords): int {
+                if ($left['wins'] !== $right['wins']) {
+                    return $right['wins'] <=> $left['wins'];
+                }
+
+                $headToHeadComparison = $this->compareHeadToHead($left['team_id'], $right['team_id'], $headToHeadRecords, $config->id, $category->id);
+                if ($headToHeadComparison !== 0) {
+                    return $headToHeadComparison;
+                }
+
+                if ($left['point_differential'] !== $right['point_differential']) {
+                    return $right['point_differential'] <=> $left['point_differential'];
+                }
+
+                return $right['points_for'] <=> $left['points_for'];
+            });
+
+            foreach ($teams as $index => $team) {
+                $teams[$index]['rank'] = $index + 1;
             }
 
             $standingsData[] = [

@@ -994,7 +994,17 @@ if (teamA && teamB && teamA === teamB) {
                             return (
                                 <div
                                     key={courtNumber}
-                                    className="group relative rounded-lg border border-border/60 bg-gradient-to-br from-background to-muted/30 p-4 transition hover:border-red-500/30 hover:shadow-md"
+                                    role={!match ? 'button' : undefined}
+                                    tabIndex={!match ? 0 : undefined}
+                                    aria-label={!match ? `Assign a match to Court ${courtNumber}` : undefined}
+                                    onClick={!match ? () => openCourtModal(courtNumber) : undefined}
+                                    onKeyDown={!match ? (event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            openCourtModal(courtNumber);
+                                        }
+                                    } : undefined}
+                                    className={`group relative rounded-lg border border-border/60 bg-gradient-to-br from-background to-muted/30 p-4 transition hover:border-red-500/30 hover:shadow-md ${!match ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50' : ''}`}
                                 >
                                     {/* Court Header */}
                                     <div className="mb-3 flex items-center justify-between">
@@ -1257,7 +1267,7 @@ if (teamA && teamB && teamA === teamB) {
 
             {/* ============ Court Match Dialog ============ */}
             <Dialog open={courtModalOpen} onOpenChange={setCourtModalOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden border-red-500/20 bg-gradient-to-b from-background via-background to-background p-0">
+                <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl max-h-[90vh] overflow-hidden border-red-500/20 bg-gradient-to-b from-background via-background to-background p-0">
                     <div className="border-b border-border/60 bg-gradient-to-r from-red-600/10 via-red-500/5 to-red-500/5 p-5">
                         <DialogHeader className="space-y-3">
                             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-red-600 dark:text-red-400">
@@ -1271,157 +1281,159 @@ if (teamA && teamB && teamA === teamB) {
                         </DialogHeader>
                     </div>
 
-                    <div className="space-y-5 overflow-y-auto p-5">
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="md:col-span-2">
-                                <Label htmlFor="court-category" className="text-sm font-medium">
-                                    Category <span className="text-destructive">*</span>
-                                </Label>
-                                <select
-                                    id="court-category"
-                                    value={courtForm.category_id}
-                                    onChange={(e) => {
-                                        setCourtForm((prev) => ({
-                                            ...prev,
-                                            category_id: e.target.value,
-                                            team_a_id: '',
-                                            team_b_id: '',
-                                        }));
-                                    }}
-                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                >
-                                    <option value="">Select category</option>
-                                    {(configuration.categories ?? []).map((cat) => (
-                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                    ))}
-                                </select>
-                                {courtErrors.category_id && <p className="mt-1 text-sm text-destructive">{courtErrors.category_id}</p>}
-                            </div>
-
-                            <div>
-                                <Label htmlFor="court-team-a" className="text-sm font-medium">Team A <span className="text-destructive">*</span></Label>
-                                <select
-                                    id="court-team-a"
-                                    value={courtForm.team_a_id}
-                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, team_a_id: e.target.value }))}
-                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                >
-                                    <option value="">Select team</option>
-                                    {teamsInSelectedCategory.map((team) => (
-                                        <option key={team.id} value={team.id}>{team.name}</option>
-                                    ))}
-                                </select>
-                                {courtErrors.team_a_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_a_id}</p>}
-                            </div>
-
-                            <div>
-                                <Label htmlFor="court-team-b" className="text-sm font-medium">Team B <span className="text-destructive">*</span></Label>
-                                <select
-                                    id="court-team-b"
-                                    value={courtForm.team_b_id}
-                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, team_b_id: e.target.value }))}
-                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                >
-                                    <option value="">Select team</option>
-                                    {teamsForTeamB.map((team) => (
-                                        <option key={team.id} value={team.id}>{team.name}</option>
-                                    ))}
-                                </select>
-                                {courtErrors.team_b_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_b_id}</p>}
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <Label htmlFor="court-umpire" className="text-sm font-medium">Umpire</Label>
-                                <select
-                                    id="court-umpire"
-                                    value={courtForm.umpire_id}
-                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, umpire_id: e.target.value }))}
-                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                >
-                                    <option value="">No umpire assigned</option>
-                                    {umpires.map((umpire) => (
-                                        <option key={umpire.id} value={umpire.id}>
-                                            {umpire.first_name} {umpire.last_name} ({umpire.email})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <Label htmlFor="court-status" className="text-sm font-medium">Status <span className="text-destructive">*</span></Label>
-                                <select
-                                    id="court-status"
-                                    value={courtForm.status_id}
-                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, status_id: e.target.value }))}
-                                    className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                >
-                                    <option value="">Select status</option>
-                                    {statuses.map((status) => (
-                                        <option key={status.id} value={status.id}>{status.name}</option>
-                                    ))}
-                                </select>
-                                {courtErrors.status_id && <p className="mt-1 text-sm text-destructive">{courtErrors.status_id}</p>}
-                            </div>
-                        </div>
-
-                        <div className="rounded-xl border border-border/60 bg-muted/90 p-4">
-                            <div className="mb-3 flex items-center gap-2">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-red-500/10 text-red-600 dark:text-red-400">
-                                    <Play className="h-3.5 w-3.5" />
-                                </div>
-                                <h3 className="text-sm font-semibold text-foreground">Next queue</h3>
-                            </div>
+                    <div className="flex h-full min-h-0 flex-col">
+                        <div className="flex-1 min-h-0 space-y-5 overflow-y-auto p-5">
                             <div className="grid gap-4 md:grid-cols-2">
                                 <div className="md:col-span-2">
-                                    <Label htmlFor="court-next-category" className="text-sm font-medium">Next category</Label>
+                                    <Label htmlFor="court-category" className="text-sm font-medium">
+                                        Category <span className="text-destructive">*</span>
+                                    </Label>
                                     <select
-                                        id="court-next-category"
-                                        value={courtForm.next_category_id}
+                                        id="court-category"
+                                        value={courtForm.category_id}
                                         onChange={(e) => {
                                             setCourtForm((prev) => ({
                                                 ...prev,
-                                                next_category_id: e.target.value,
-                                                next_team_a_id: '',
-                                                next_team_b_id: '',
+                                                category_id: e.target.value,
+                                                team_a_id: '',
+                                                team_b_id: '',
                                             }));
                                         }}
                                         className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
                                     >
-                                        <option value="">No next category</option>
+                                        <option value="">Select category</option>
                                         {(configuration.categories ?? []).map((cat) => (
                                             <option key={cat.id} value={cat.id}>{cat.name}</option>
                                         ))}
                                     </select>
+                                    {courtErrors.category_id && <p className="mt-1 text-sm text-destructive">{courtErrors.category_id}</p>}
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="court-next-team-a" className="text-sm font-medium">Next Team A</Label>
+                                    <Label htmlFor="court-team-a" className="text-sm font-medium">Team A <span className="text-destructive">*</span></Label>
                                     <select
-                                        id="court-next-team-a"
-                                        value={courtForm.next_team_a_id}
-                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_a_id: e.target.value }))}
+                                        id="court-team-a"
+                                        value={courtForm.team_a_id}
+                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, team_a_id: e.target.value }))}
                                         className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
                                     >
-                                        <option value="">No next team</option>
-                                        {teamsForNextA.map((team) => (
+                                        <option value="">Select team</option>
+                                        {teamsInSelectedCategory.map((team) => (
                                             <option key={team.id} value={team.id}>{team.name}</option>
+                                        ))}
+                                    </select>
+                                    {courtErrors.team_a_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_a_id}</p>}
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="court-team-b" className="text-sm font-medium">Team B <span className="text-destructive">*</span></Label>
+                                    <select
+                                        id="court-team-b"
+                                        value={courtForm.team_b_id}
+                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, team_b_id: e.target.value }))}
+                                        className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                    >
+                                        <option value="">Select team</option>
+                                        {teamsForTeamB.map((team) => (
+                                            <option key={team.id} value={team.id}>{team.name}</option>
+                                        ))}
+                                    </select>
+                                    {courtErrors.team_b_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_b_id}</p>}
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <Label htmlFor="court-umpire" className="text-sm font-medium">Umpire</Label>
+                                    <select
+                                        id="court-umpire"
+                                        value={courtForm.umpire_id}
+                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, umpire_id: e.target.value }))}
+                                        className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                    >
+                                        <option value="">No umpire assigned</option>
+                                        {umpires.map((umpire) => (
+                                            <option key={umpire.id} value={umpire.id}>
+                                                {umpire.first_name} {umpire.last_name} ({umpire.email})
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <div>
-                                    <Label htmlFor="court-next-team-b" className="text-sm font-medium">Next Team B</Label>
+                                <div className="md:col-span-2">
+                                    <Label htmlFor="court-status" className="text-sm font-medium">Status <span className="text-destructive">*</span></Label>
                                     <select
-                                        id="court-next-team-b"
-                                        value={courtForm.next_team_b_id}
-                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_b_id: e.target.value }))}
+                                        id="court-status"
+                                        value={courtForm.status_id}
+                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, status_id: e.target.value }))}
                                         className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
                                     >
-                                        <option value="">No next team</option>
-                                        {teamsForNextB.map((team) => (
-                                            <option key={team.id} value={team.id}>{team.name}</option>
+                                        <option value="">Select status</option>
+                                        {statuses.map((status) => (
+                                            <option key={status.id} value={status.id}>{status.name}</option>
                                         ))}
                                     </select>
+                                    {courtErrors.status_id && <p className="mt-1 text-sm text-destructive">{courtErrors.status_id}</p>}
+                                </div>
+                            </div>
+
+                            <div className="rounded-xl border border-border/60 bg-muted/90 p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-red-500/10 text-red-600 dark:text-red-400">
+                                        <Play className="h-3.5 w-3.5" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold text-foreground">Next queue</h3>
+                                </div>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="md:col-span-2">
+                                        <Label htmlFor="court-next-category" className="text-sm font-medium">Next category</Label>
+                                        <select
+                                            id="court-next-category"
+                                            value={courtForm.next_category_id}
+                                            onChange={(e) => {
+                                                setCourtForm((prev) => ({
+                                                    ...prev,
+                                                    next_category_id: e.target.value,
+                                                    next_team_a_id: '',
+                                                    next_team_b_id: '',
+                                                }));
+                                            }}
+                                            className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                        >
+                                            <option value="">No next category</option>
+                                            {(configuration.categories ?? []).map((cat) => (
+                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="court-next-team-a" className="text-sm font-medium">Next Team A</Label>
+                                        <select
+                                            id="court-next-team-a"
+                                            value={courtForm.next_team_a_id}
+                                            onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_a_id: e.target.value }))}
+                                            className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                        >
+                                            <option value="">No next team</option>
+                                            {teamsForNextA.map((team) => (
+                                                <option key={team.id} value={team.id}>{team.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="court-next-team-b" className="text-sm font-medium">Next Team B</Label>
+                                        <select
+                                            id="court-next-team-b"
+                                            value={courtForm.next_team_b_id}
+                                            onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_b_id: e.target.value }))}
+                                            className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
+                                        >
+                                            <option value="">No next team</option>
+                                            {teamsForNextB.map((team) => (
+                                                <option key={team.id} value={team.id}>{team.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
