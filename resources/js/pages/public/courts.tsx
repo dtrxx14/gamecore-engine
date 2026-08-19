@@ -436,7 +436,7 @@ export default function Courts({ configurations: initialConfigs, courtsByConfig:
                 </div>
 
                 {isIdle ? (
-                    <div className="relative flex flex-col items-center justify-center py-8 text-muted-foreground">
+                    <div className="relative flex flex-col h-full items-center justify-center pb-8 text-muted-foreground">
                         <Swords className="mb-2 h-8 w-8 text-muted-foreground/30" />
                         <p className="text-xs font-medium">No Match Scheduled</p>
                     </div>

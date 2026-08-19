@@ -18,8 +18,10 @@ import {
     Target,
     Play,
     Hourglass,
+    QrCode,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import QRCode from 'react-qr-code';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +35,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import PlayerSearchInput from '@/components/ui/player-search-input';
+import TeamSearchInput from '@/components/ui/team-search-input';
 
 interface Status {
     id: number;
@@ -89,6 +92,7 @@ interface LiveMatchScore {
 interface LiveConfigurationData {
     id: number;
     name: string;
+    slug: string;
     number_of_courts: number;
     scoring_system: string;
     game_to: number;
@@ -170,6 +174,7 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
     });
     const [courtErrors, setCourtErrors] = useState<Record<string, string>>({});
     const [courtSaving, setCourtSaving] = useState(false);
+    const [qrCodeModalOpen, setQrCodeModalOpen] = useState(false);
 
     // ---- Remove confirmations ----
     const [removeCourtTarget, setRemoveCourtTarget] = useState<LiveMatchScore | null>(null);
@@ -182,6 +187,8 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
     const activeStatus = statuses.find((s) => s.slug === 'active');
     const completedStatusId = statuses.find((s) => s.slug === 'completed')?.id;
     const playingStatusId = statuses.find((s) => s.slug === 'playing')?.id;
+    const publicCourtsUrl = `${window.location.origin}/${configuration.slug}/courts`;
+    const publicStandingsUrl = `${window.location.origin}/${configuration.slug}/standings`;
 
     const getStatusById = (statusId: number | null | undefined) => {
         if (statusId === null || statusId === undefined || statusId === 0) {
@@ -679,12 +686,24 @@ if (teamA && teamB && teamA === teamB) {
                                 </div>
                             </div>
                         </div>
-                        <Link href={`/admin/live-configuration/${configuration.id}/edit`}>
-                            <Button variant="outline" size="sm" className="inline-flex items-center gap-2">
-                                <Settings2 className="h-4 w-4" />
-                                Edit configuration
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="inline-flex items-center gap-2"
+                                onClick={() => setQrCodeModalOpen(true)}
+                            >
+                                <QrCode className="h-4 w-4" />
+                                Show QR
                             </Button>
-                        </Link>
+                            <Link href={`/admin/live-configuration/${configuration.id}/edit`}>
+                                <Button variant="outline" size="sm" className="inline-flex items-center gap-2">
+                                    <Settings2 className="h-4 w-4" />
+                                    Edit configuration
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
                 </div>
 
@@ -1311,33 +1330,23 @@ if (teamA && teamB && teamA === teamB) {
 
                                 <div>
                                     <Label htmlFor="court-team-a" className="text-sm font-medium">Team A <span className="text-destructive">*</span></Label>
-                                    <select
-                                        id="court-team-a"
-                                        value={courtForm.team_a_id}
-                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, team_a_id: e.target.value }))}
-                                        className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                    >
-                                        <option value="">Select team</option>
-                                        {teamsInSelectedCategory.map((team) => (
-                                            <option key={team.id} value={team.id}>{team.name}</option>
-                                        ))}
-                                    </select>
+                                    <TeamSearchInput
+                                        teams={teamsInSelectedCategory}
+                                        selectedTeamId={selectedTeamAId}
+                                        onTeamChange={(teamId) => setCourtForm((prev) => ({ ...prev, team_a_id: teamId }))}
+                                        placeholder="Search Team A..."
+                                    />
                                     {courtErrors.team_a_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_a_id}</p>}
                                 </div>
 
                                 <div>
                                     <Label htmlFor="court-team-b" className="text-sm font-medium">Team B <span className="text-destructive">*</span></Label>
-                                    <select
-                                        id="court-team-b"
-                                        value={courtForm.team_b_id}
-                                        onChange={(e) => setCourtForm((prev) => ({ ...prev, team_b_id: e.target.value }))}
-                                        className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                    >
-                                        <option value="">Select team</option>
-                                        {teamsForTeamB.map((team) => (
-                                            <option key={team.id} value={team.id}>{team.name}</option>
-                                        ))}
-                                    </select>
+                                    <TeamSearchInput
+                                        teams={teamsForTeamB}
+                                        selectedTeamId={selectedTeamBId}
+                                        onTeamChange={(teamId) => setCourtForm((prev) => ({ ...prev, team_b_id: teamId }))}
+                                        placeholder="Search Team B..."
+                                    />
                                     {courtErrors.team_b_id && <p className="mt-1 text-sm text-destructive">{courtErrors.team_b_id}</p>}
                                 </div>
 
@@ -1407,32 +1416,22 @@ if (teamA && teamB && teamA === teamB) {
 
                                     <div>
                                         <Label htmlFor="court-next-team-a" className="text-sm font-medium">Next Team A</Label>
-                                        <select
-                                            id="court-next-team-a"
-                                            value={courtForm.next_team_a_id}
-                                            onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_a_id: e.target.value }))}
-                                            className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                        >
-                                            <option value="">No next team</option>
-                                            {teamsForNextA.map((team) => (
-                                                <option key={team.id} value={team.id}>{team.name}</option>
-                                            ))}
-                                        </select>
+                                        <TeamSearchInput
+                                            teams={teamsForNextA}
+                                            selectedTeamId={selectedNextAId}
+                                            onTeamChange={(teamId) => setCourtForm((prev) => ({ ...prev, next_team_a_id: teamId }))}
+                                            placeholder="Search Next Team A..."
+                                        />
                                     </div>
 
                                     <div>
                                         <Label htmlFor="court-next-team-b" className="text-sm font-medium">Next Team B</Label>
-                                        <select
-                                            id="court-next-team-b"
-                                            value={courtForm.next_team_b_id}
-                                            onChange={(e) => setCourtForm((prev) => ({ ...prev, next_team_b_id: e.target.value }))}
-                                            className="mt-1.5 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-none outline-none transition focus-visible:border-red-500/60"
-                                        >
-                                            <option value="">No next team</option>
-                                            {teamsForNextB.map((team) => (
-                                                <option key={team.id} value={team.id}>{team.name}</option>
-                                            ))}
-                                        </select>
+                                        <TeamSearchInput
+                                            teams={teamsForNextB}
+                                            selectedTeamId={selectedNextBId}
+                                            onTeamChange={(teamId) => setCourtForm((prev) => ({ ...prev, next_team_b_id: teamId }))}
+                                            placeholder="Search Next Team B..."
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -1449,6 +1448,63 @@ if (teamA && teamB && teamA === teamB) {
                         >
                             Save assignment
                         </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ============ Public Courts QR Dialog ============ */}
+            <Dialog open={qrCodeModalOpen} onOpenChange={setQrCodeModalOpen}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Show QR code</DialogTitle>
+                        <DialogDescription>
+                            Scan this code to open the live courts and standings display for {configuration.name}.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6 py-4 sm:grid-cols-2">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="rounded-xl border border-border/60 bg-white p-3 shadow-sm">
+                                <QRCode
+                                    value={publicCourtsUrl}
+                                    size={180}
+                                    level="M"
+                                    title={`Courts for ${configuration.name}`}
+                                />
+                            </div>
+                            <div className="w-full text-center">
+                                <p className="text-sm font-semibold text-foreground">Live courts</p>
+                                <p className="mt-1 break-all rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground">
+                                    {publicCourtsUrl}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="rounded-xl border border-border/60 bg-white p-3 shadow-sm">
+                                <QRCode
+                                    value={publicStandingsUrl}
+                                    size={180}
+                                    level="M"
+                                    title={`Standings for ${configuration.name}`}
+                                />
+                            </div>
+                            <div className="w-full text-center">
+                                <p className="text-sm font-semibold text-foreground">Live standings</p>
+                                <p className="mt-1 break-all rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground">
+                                    {publicStandingsUrl}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setQrCodeModalOpen(false)}>Close</Button>
+                        <div className="flex flex-wrap justify-end gap-2">
+                            <a href={publicCourtsUrl} target="_blank" rel="noreferrer">
+                                <Button type="button">Open courts</Button>
+                            </a>
+                            <a href={publicStandingsUrl} target="_blank" rel="noreferrer">
+                                <Button type="button">Open standings</Button>
+                            </a>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

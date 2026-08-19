@@ -303,13 +303,13 @@ const startPolling = () => {
                     </div>
 
                     <div className="border-t border-red-500/10 px-4 py-3 sm:px-6 lg:px-8">
-                        <div className="mx-auto max-w-7xl">
+                        <div className="flex justify-center mx-auto max-w-6xl">
                             <input
                                 type="text"
                                 placeholder="Search teams..."
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className="w-full rounded-xl border border-red-500/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-400 outline-none transition-all focus:border-red-400/60 focus:bg-white/10"
+                                className="h-16 text-xl w-7xl px-4 rounded-xl border border-red-500/20 bg-white/5 text-white placeholder-slate-400 outline-none transition-all focus:border-red-400/60 focus:bg-white/10"
                             />
                         </div>
                     </div>
@@ -319,6 +319,11 @@ const startPolling = () => {
                     <div className="space-y-6">
                         {standingsByConfig.map(config => {
                             const isConfigExpanded = expandedConfigs[config.configuration_id] ?? true;
+                            const categoriesWithTeams = (config.categories ?? []).filter(category => category.teams?.length > 0);
+
+                            if (categoriesWithTeams.length === 0) {
+                                return null;
+                            }
 
                             return (
                                 <div
@@ -354,7 +359,7 @@ const startPolling = () => {
 
                                     {isConfigExpanded && (
                                         <div className="border-t border-red-500/10 bg-slate-950/30">
-                                            {config.categories.map(category => {
+                                            {categoriesWithTeams.map(category => {
                                                 const catKey = `${config.configuration_id}-${category.category_id}`;
                                                 const isCatExpanded = expandedCategories[catKey] ?? true;
                                                 const filteredTeams = filterTeams(category.teams);
