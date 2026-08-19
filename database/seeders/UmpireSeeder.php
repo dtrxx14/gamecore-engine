@@ -27,15 +27,9 @@ class UmpireSeeder extends Seeder
         }
 
         $umpires = [
-            ['email' => 'umpire1@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Norman', 'last_name' => 'Dulag'],
-            ['email' => 'umpire2@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Alliyah Rhian', 'last_name' => 'Mendoza'],
-            ['email' => 'umpire3@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Tony', 'last_name' => 'Herrera'],
-            ['email' => 'umpire4@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Justine', 'last_name' => 'Atacador'],
-            ['email' => 'umpire5@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Irvin', 'last_name' => 'Navales'],
-            ['email' => 'umpire6@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'JC', 'last_name' => 'Gadiano'],
-            ['email' => 'umpire7@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Caleb', 'last_name' => 'Manguni'],
-            ['email' => 'umpire8@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'King Florence', 'last_name' => 'Capiña'],
-            ['email' => 'umpire9@gamecore-engine.com', 'gender' => 'male', 'first_name' => 'Aryz', 'last_name' => 'Zara'],
+            ['email' => 'umpire1@gamecore.com', 'gender' => 'male', 'first_name' => 'Umpire', 'last_name' => 'One'],
+            ['email' => 'umpire2@gamecore.com', 'gender' => 'male', 'first_name' => 'Umpire', 'last_name' => 'Two'],
+            ['email' => 'umpire3@gamecore.com', 'gender' => 'male', 'first_name' => 'Umpire', 'last_name' => 'Three'],
         ];
 
         foreach ($umpires as $data) {
