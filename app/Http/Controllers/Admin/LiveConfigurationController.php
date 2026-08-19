@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\MatchScoreUpdated;
+use App\Events\StandingsUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\LiveCategory;
 use App\Models\LiveConfiguration;
@@ -11,8 +12,11 @@ use App\Models\LiveStanding;
 use App\Models\LiveTeam;
 use App\Models\Status;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Response;
 
 class LiveConfigurationController extends Controller
@@ -84,7 +88,7 @@ class LiveConfigurationController extends Controller
      */
     private function generateUniqueSlug(string $name): string
     {
-        $base = \Illuminate\Support\Str::slug($name);
+        $base = Str::slug($name);
         $slug = $base;
         $counter = 2;
 
@@ -135,7 +139,7 @@ class LiveConfigurationController extends Controller
         // Resolve player names for team display and team edit modal
         $allPlayerIds = $teams->pluck('player_ids')->flatten()->unique()->filter()->values()->toArray();
         $players = [];
-        if (!empty($allPlayerIds)) {
+        if (! empty($allPlayerIds)) {
             $players = User::query()
                 ->join('player_information', 'users.id', '=', 'player_information.user_id')
                 ->whereIn('users.id', $allPlayerIds)
@@ -298,7 +302,7 @@ class LiveConfigurationController extends Controller
     // Player Search (for team creation)
     // ========================
 
-    public function searchPlayers(Request $request): \Illuminate\Http\JsonResponse
+    public function searchPlayers(Request $request): JsonResponse
     {
         $query = $request->input('q', '');
         $excludeIds = $request->input('exclude_ids', []);
@@ -312,7 +316,7 @@ class LiveConfigurationController extends Controller
             ->where('users.role_id', function ($q) {
                 $q->select('id')->from('roles')->where('slug', 'player')->limit(1);
             })
-            ->when(!empty($excludeIds), function ($q) use ($excludeIds) {
+            ->when(! empty($excludeIds), function ($q) use ($excludeIds) {
                 $q->whereNotIn('users.id', $excludeIds);
             })
             ->when($query, function ($q) use ($query) {
@@ -429,6 +433,14 @@ class LiveConfigurationController extends Controller
 
     public function storeMatchScore(Request $request): RedirectResponse
     {
+        $completedStatusId = Status::query()
+            ->where('type', 'live-match')
+            ->where('slug', 'completed')
+            ->value('id');
+        $existingMatch = $request->filled('id')
+            ? LiveMatchScore::find($request->integer('id'))
+            : null;
+
         $validated = $request->validate([
             'live_configuration_id' => ['required', 'integer', 'exists:live_configurations,id'],
             'court_number' => ['required', 'integer', 'min:1'],
@@ -441,7 +453,23 @@ class LiveConfigurationController extends Controller
             'next_team_b_id' => ['nullable', 'integer', 'exists:live_teams,id'],
             'umpire_id' => ['nullable', 'integer', 'exists:users,id'],
             'status_id' => ['required', 'integer', 'exists:statuses,id'],
+            'team_a_score' => ['nullable', 'integer', 'min:0'],
+            'team_b_score' => ['nullable', 'integer', 'min:0'],
         ]);
+        $isCompletingMatch = (int) $validated['status_id'] === (int) $completedStatusId;
+
+        if ($isCompletingMatch) {
+            $request->validate([
+                'team_a_score' => ['required', 'integer', 'min:0'],
+                'team_b_score' => ['required', 'integer', 'min:0'],
+            ]);
+
+            if ((int) $request->input('team_a_score') === (int) $request->input('team_b_score')) {
+                throw ValidationException::withMessages([
+                    'team_b_score' => 'A completed match must have a winner. Scores cannot be tied.',
+                ]);
+            }
+        }
 
         $match = LiveMatchScore::updateOrCreate(
             [
@@ -458,11 +486,46 @@ class LiveConfigurationController extends Controller
                 'next_team_a_id' => $validated['next_team_a_id'] ?? null,
                 'next_team_b_id' => $validated['next_team_b_id'] ?? null,
                 'umpire_id' => $validated['umpire_id'] ?? null,
+                'team_a_score' => $validated['team_a_score'] ?? 0,
+                'team_b_score' => $validated['team_b_score'] ?? 0,
                 'status_id' => $validated['status_id'],
+                'end_play_at' => $isCompletingMatch ? ($existingMatch?->end_play_at ?? now()) : null,
             ]
         );
 
+        if ($isCompletingMatch && ! $existingMatch?->end_play_at) {
+            $this->persistStandings($match);
+            $this->dispatchStandingsEvent($match->live_configuration_id);
+        }
+
         $this->dispatchMatchScoreUpdate($match);
+
+        if ($isCompletingMatch && ! $existingMatch?->end_play_at) {
+            if ($match->next_team_a_id && $match->next_team_b_id) {
+                $pendingStatusId = Status::query()
+                    ->where('type', 'live-match')
+                    ->where('slug', 'pending')
+                    ->value('id');
+
+                if ($pendingStatusId) {
+                    $nextMatch = LiveMatchScore::create([
+                        'live_configuration_id' => $match->live_configuration_id,
+                        'court_number' => $match->court_number,
+                        'category_id' => $match->next_category_id,
+                        'team_a_id' => $match->next_team_a_id,
+                        'team_b_id' => $match->next_team_b_id,
+                        'team_a_score' => 0,
+                        'team_b_score' => 0,
+                        'rally_count' => 0,
+                        'serving_team' => null,
+                        'status_id' => $pendingStatusId,
+                        'umpire_id' => null,
+                    ]);
+
+                    $this->dispatchMatchScoreUpdate($nextMatch);
+                }
+            }
+        }
 
         return redirect()->back()->with('success', 'Match score updated successfully.');
     }
@@ -510,6 +573,88 @@ class LiveConfigurationController extends Controller
         return redirect()->back()->with('success', 'Match removed from court.');
     }
 
+    private function persistStandings(LiveMatchScore $match): void
+    {
+        if (! $match->team_a_id || ! $match->team_b_id || ! $match->category_id) {
+            return;
+        }
+
+        $teamAWon = $match->team_a_score > $match->team_b_score;
+        $standingA = LiveStanding::firstOrNew([
+            'live_configuration_id' => $match->live_configuration_id,
+            'category_id' => $match->category_id,
+            'team_id' => $match->team_a_id,
+        ]);
+        $standingA->court_number = $match->court_number;
+        $standingA->matches_played++;
+        $standingA->wins += $teamAWon ? 1 : 0;
+        $standingA->losses += $teamAWon ? 0 : 1;
+        $standingA->points_for += $match->team_a_score;
+        $standingA->points_against += $match->team_b_score;
+        $standingA->point_differential = $standingA->points_for - $standingA->points_against;
+        $standingA->save();
+
+        $standingB = LiveStanding::firstOrNew([
+            'live_configuration_id' => $match->live_configuration_id,
+            'category_id' => $match->category_id,
+            'team_id' => $match->team_b_id,
+        ]);
+        $standingB->court_number = $match->court_number;
+        $standingB->matches_played++;
+        $standingB->wins += $teamAWon ? 0 : 1;
+        $standingB->losses += $teamAWon ? 1 : 0;
+        $standingB->points_for += $match->team_b_score;
+        $standingB->points_against += $match->team_a_score;
+        $standingB->point_differential = $standingB->points_for - $standingB->points_against;
+        $standingB->save();
+    }
+
+    private function dispatchStandingsEvent(int $configurationId): void
+    {
+        $configuration = LiveConfiguration::with('categories')->find($configurationId);
+        if (! $configuration) {
+            return;
+        }
+
+        $standingsData = $configuration->categories->map(function (LiveCategory $category) use ($configurationId) {
+            $teams = LiveStanding::query()
+                ->where('live_configuration_id', $configurationId)
+                ->where('category_id', $category->id)
+                ->with('team')
+                ->get()
+                ->sort(function (LiveStanding $left, LiveStanding $right) {
+                    return [$right->wins, $right->point_differential, $right->points_for]
+                        <=> [$left->wins, $left->point_differential, $left->points_for];
+                })
+                ->values()
+                ->map(function (LiveStanding $standing, int $index) use ($category, $configurationId) {
+                    return [
+                        'live_configuration_id' => $configurationId,
+                        'category_id' => $category->id,
+                        'team_id' => $standing->team_id,
+                        'team_name' => $standing->team?->name,
+                        'rank' => $index + 1,
+                        'matches_played' => (int) $standing->matches_played,
+                        'wins' => (int) $standing->wins,
+                        'losses' => (int) $standing->losses,
+                        'points_for' => (int) $standing->points_for,
+                        'points_against' => (int) $standing->points_against,
+                        'point_differential' => (int) $standing->point_differential,
+                    ];
+                })->all();
+
+            return [
+                'live_configuration_id' => $configurationId,
+                'category_id' => $category->id,
+                'category_name' => $category->name,
+                'game_to' => $category->game_to,
+                'teams' => $teams,
+            ];
+        })->all();
+
+        broadcast(new StandingsUpdated($configuration, $standingsData));
+    }
+
     protected function dispatchMatchScoreUpdate(LiveMatchScore $match): void
     {
         $configuration = $match->liveConfiguration()->first();
@@ -545,4 +690,3 @@ class LiveConfigurationController extends Controller
         broadcast(new MatchScoreUpdated($configuration, $matchData, $previousUmpireId));
     }
 }
-

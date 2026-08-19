@@ -171,6 +171,8 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
         next_team_b_id: '',
         umpire_id: '',
         status_id: '27',
+        team_a_score: '',
+        team_b_score: '',
     });
     const [courtErrors, setCourtErrors] = useState<Record<string, string>>({});
     const [courtSaving, setCourtSaving] = useState(false);
@@ -481,9 +483,11 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
                 next_team_b_id: String(existing.next_team_b_id ?? ''),
                 umpire_id: String((existing as any).umpire_id ?? ''),
                 status_id: String(existing.status_id ?? activeStatus?.id ?? ''),
+                team_a_score: String(existing.team_a_score ?? 0),
+                team_b_score: String(existing.team_b_score ?? 0),
             });
         } else {
-            setCourtForm({ category_id: '', next_category_id: '', team_a_id: '', team_b_id: '', next_team_a_id: '', next_team_b_id: '', umpire_id: '', status_id: String(activeStatus?.id ?? '') });
+            setCourtForm({ category_id: '', next_category_id: '', team_a_id: '', team_b_id: '', next_team_a_id: '', next_team_b_id: '', umpire_id: '', status_id: String(activeStatus?.id ?? ''), team_a_score: '', team_b_score: '' });
         }
         setCourtModalOpen(true);
     };
@@ -497,6 +501,8 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
         const teamB = courtForm.team_b_id ? Number(courtForm.team_b_id) : null;
         const nextA = courtForm.next_team_a_id ? Number(courtForm.next_team_a_id) : null;
         const nextB = courtForm.next_team_b_id ? Number(courtForm.next_team_b_id) : null;
+        const teamAScore = courtForm.team_a_score === '' ? null : Number(courtForm.team_a_score);
+        const teamBScore = courtForm.team_b_score === '' ? null : Number(courtForm.team_b_score);
 
         if (!categoryId) {
             errs.category_id = 'Category is required.';
@@ -506,6 +512,13 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
         }
         if (!teamB) {
             errs.team_b_id = 'Team B is required.';
+        }
+        if (completedStatusId && Number(courtForm.status_id) === completedStatusId) {
+            if (teamAScore === null) errs.team_a_score = 'Team A score is required.';
+            if (teamBScore === null) errs.team_b_score = 'Team B score is required.';
+            if (teamAScore !== null && teamBScore !== null && teamAScore === teamBScore) {
+                errs.team_b_score = 'A completed match must have a winner.';
+            }
         }
 
         // If one next team is filled, the other must also be filled
@@ -539,6 +552,8 @@ if (teamA && teamB && teamA === teamB) {
             team_b_id: teamB,
             next_team_a_id: nextA,
             next_team_b_id: nextB,
+            team_a_score: teamAScore,
+            team_b_score: teamBScore,
             umpire_id: courtForm.umpire_id ? Number(courtForm.umpire_id) : null,
             status_id: Number(courtForm.status_id),
         }, {
@@ -1382,6 +1397,41 @@ if (teamA && teamB && teamA === teamB) {
                                     </select>
                                     {courtErrors.status_id && <p className="mt-1 text-sm text-destructive">{courtErrors.status_id}</p>}
                                 </div>
+
+                                {completedStatusId && Number(courtForm.status_id) === completedStatusId && (
+                                    <div className="md:col-span-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                                        <div className="mb-3">
+                                            <h3 className="text-sm font-semibold text-foreground">Manual final score</h3>
+                                            <p className="mt-1 text-xs text-muted-foreground">Enter the final score when the umpire application is unavailable. The scores cannot be tied.</p>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div>
+                                                <Label htmlFor="court-team-a-score" className="text-sm font-medium">Team A score <span className="text-destructive">*</span></Label>
+                                                <Input
+                                                    id="court-team-a-score"
+                                                    type="number"
+                                                    min={0}
+                                                    value={courtForm.team_a_score}
+                                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, team_a_score: e.target.value }))}
+                                                    className="mt-1.5"
+                                                />
+                                                {courtErrors.team_a_score && <p className="mt-1 text-sm text-destructive">{courtErrors.team_a_score}</p>}
+                                            </div>
+                                            <div>
+                                                <Label htmlFor="court-team-b-score" className="text-sm font-medium">Team B score <span className="text-destructive">*</span></Label>
+                                                <Input
+                                                    id="court-team-b-score"
+                                                    type="number"
+                                                    min={0}
+                                                    value={courtForm.team_b_score}
+                                                    onChange={(e) => setCourtForm((prev) => ({ ...prev, team_b_score: e.target.value }))}
+                                                    className="mt-1.5"
+                                                />
+                                                {courtErrors.team_b_score && <p className="mt-1 text-sm text-destructive">{courtErrors.team_b_score}</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="rounded-xl border border-border/60 bg-muted/90 p-4">
