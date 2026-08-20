@@ -120,6 +120,15 @@ class UserManagementController extends Controller
         return to_route('admin.user-management.index');
     }
 
+    public function verifyEmail(User $user): RedirectResponse
+    {
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
+
+        return to_route('admin.user-management.index');
+    }
+
     public function destroy(User $user): RedirectResponse
     {
         $user->delete();

@@ -132,6 +132,21 @@ test('admin can view and recover deleted login accounts', function () {
     expect(User::withTrashed()->findOrFail($deletedUser->id)->deleted_at)->toBeNull();
 });
 
+test('admin can instantly verify a user email', function () {
+    $user = User::factory()->unverified()->create([
+        'email' => 'unverified@example.com',
+        'role_id' => $this->adminRole->id,
+        'status_id' => $this->activeStatus->id,
+    ]);
+
+    $this
+        ->actingAs($this->admin)
+        ->post(route('admin.user-management.verify-email', $user))
+        ->assertRedirect(route('admin.user-management.index'));
+
+    expect($user->refresh()->hasVerifiedEmail())->toBeTrue();
+});
+
 test('admin can create, update, toggle status, and reset a password', function () {
     $response = $this
         ->actingAs($this->admin)

@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MailCheck, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -65,7 +65,7 @@ interface Props {
     };
 }
 
-type ConfirmActionType = 'toggle-status' | 'reset-password' | 'delete' | 'recover';
+type ConfirmActionType = 'toggle-status' | 'reset-password' | 'delete' | 'recover' | 'verify-email';
 
 type ConfirmAction = {
     type: ConfirmActionType;
@@ -275,6 +275,16 @@ return;
             return;
         }
 
+        if (type === 'verify-email') {
+            router.post(`/admin/user-management/${user.id}/verify-email`, {}, {
+                onFinish: () => {
+                    setIsConfirming(null);
+                    setConfirmAction(null);
+                },
+            });
+            return;
+        }
+
         setConfirmAction(null);
     };
 
@@ -414,6 +424,16 @@ return;
                                                             </TooltipTrigger>
                                                             <TooltipContent>Reset password</TooltipContent>
                                                         </Tooltip>
+                                                        {!user.email_verified_at && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button size="sm" variant="outline" onClick={() => handleConfirmAction({ type: 'verify-email', user })}>
+                                                                        <MailCheck className="size-4" />
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Verify email</TooltipContent>
+                                                            </Tooltip>
+                                                        )}
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
                                                                 <Button size="sm" variant="outline" onClick={() => handleConfirmAction({ type: 'toggle-status', user })}>
@@ -751,6 +771,8 @@ return;
                                 ? 'Delete admin user'
                                 : confirmAction?.type === 'recover'
                                 ? 'Recover account'
+                                : confirmAction?.type === 'verify-email'
+                                ? 'Verify email'
                                 : confirmAction?.type === 'reset-password'
                                 ? 'Reset password'
                                 : 'Change account status'}
@@ -759,6 +781,8 @@ return;
                             {confirmAction?.type === 'delete' && 'This action permanently removes the admin user.'}
                             {confirmAction?.type === 'recover' &&
                                 `Recover ${confirmAction.user.email} and return it to the active accounts list?`}
+                            {confirmAction?.type === 'verify-email' &&
+                                `Verify ${confirmAction.user.email} immediately?`}
                             {confirmAction?.type === 'reset-password' &&
                                 'Reset the admin password to the default temporary password.'}
                             {confirmAction?.type === 'toggle-status' &&
