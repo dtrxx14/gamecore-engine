@@ -53,6 +53,61 @@ test('admin can list and manage admin users', function () {
             ->where('admins.0.email', $target->email));
 });
 
+test('admin can see umpire users in user management', function () {
+    $umpireRole = Role::create([
+        'type' => 'login',
+        'name' => 'Umpire',
+        'slug' => 'umpire',
+        'status_id' => $this->activeStatus->id,
+    ]);
+    $umpire = User::factory()->create([
+        'email' => 'umpire@example.com',
+        'role_id' => $umpireRole->id,
+        'status_id' => $this->activeStatus->id,
+    ]);
+
+    $this
+        ->actingAs($this->admin)
+        ->get(route('admin.user-management.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/user-management')
+            ->where('admins.0.email', $umpire->email)
+            ->where('admins.0.role.slug', 'umpire'));
+});
+
+test('admin can create an umpire with a verified profile', function () {
+    $umpireRole = Role::create([
+        'type' => 'login',
+        'name' => 'Umpire',
+        'slug' => 'umpire',
+        'status_id' => $this->activeStatus->id,
+    ]);
+
+    $this
+        ->actingAs($this->admin)
+        ->post(route('admin.user-management.store'), [
+            'email' => 'new-umpire@example.com',
+            'password' => 'Password123!',
+            'account_type' => 'umpire',
+            'first_name' => 'New',
+            'last_name' => 'Umpire',
+            'gender' => 'female',
+        ])
+        ->assertRedirect(route('admin.user-management.index'));
+
+    $umpire = User::query()->where('email', 'new-umpire@example.com')->firstOrFail();
+
+    expect($umpire->role_id)->toBe($umpireRole->id)
+        ->and($umpire->status_id)->toBe($this->activeStatus->id)
+        ->and($umpire->email_verified_at)->not->toBeNull()
+        ->and(Hash::check('Password123!', $umpire->password))->toBeTrue()
+        ->and($umpire->playerInformation->only(['first_name', 'last_name', 'gender']))->toBe([
+            'first_name' => 'New',
+            'last_name' => 'Umpire',
+            'gender' => 'female',
+        ]);
+});
+
 test('admin can create, update, toggle status, and reset a password', function () {
     $response = $this
         ->actingAs($this->admin)

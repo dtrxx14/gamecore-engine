@@ -20,7 +20,9 @@ class UserManagementController extends Controller
 
         $admins = User::query()
             ->with(['role', 'status'])
-            ->whereHas('role', fn ($query) => $query->where('slug', 'admin'))
+            ->whereHas('role', fn ($query) => $query
+                ->where('type', 'login')
+                ->whereIn('slug', ['admin', 'umpire']))
             ->where('id', '!=', $request->user()->id)
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($subQuery) use ($search) {
@@ -28,7 +30,7 @@ class UserManagementController extends Controller
                         ->orWhere('account_number', 'like', "%{$search}%");
                 });
             })
-            ->latest('created_at')
+            ->latest('id')
             ->paginate($perPage)
             ->appends($request->only(['search', 'per_page']));
 
@@ -46,19 +48,32 @@ class UserManagementController extends Controller
         $request->validate([
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
+            'account_type' => ['nullable', 'in:admin,umpire'],
+            'gender' => ['required_if:account_type,umpire', 'in:male,female'],
+            'first_name' => ['required_if:account_type,umpire', 'string', 'max:255'],
+            'last_name' => ['required_if:account_type,umpire', 'string', 'max:255'],
         ]);
 
-        $adminRole = Role::query()->where('type', 'login')->where('slug', 'admin')->firstOrFail();
+        $accountType = $request->string('account_type')->value() ?: 'admin';
+        $role = Role::query()->where('type', 'login')->where('slug', $accountType)->firstOrFail();
         $activeStatus = Status::query()->where('type', 'login')->where('slug', 'active')->firstOrFail();
 
-        User::query()->create([
+        $user = User::query()->create([
             'email' => $request->string('email')->trim(),
             'account_number' => $this->generateAccountNumber(),
             'password' => Hash::make($request->string('password')->value()),
-            'role_id' => $adminRole->id,
+            'role_id' => $role->id,
             'status_id' => $activeStatus->id,
             'email_verified_at' => now(),
         ]);
+
+        if ($accountType === 'umpire') {
+            $user->playerInformation()->create([
+                'first_name' => $request->string('first_name')->trim(),
+                'last_name' => $request->string('last_name')->trim(),
+                'gender' => $request->string('gender')->lower()->value(),
+            ]);
+        }
 
         return to_route('admin.user-management.index');
     }

@@ -20,10 +20,6 @@ class UserSeeder extends Seeder
     {
         User::truncate();
         PlayerInformation::truncate();
-        LiveTeam::truncate();
-        LiveMatchScore::truncate();
-        LiveConfiguration::truncate();
-        LiveCategory::truncate();
 
         $adminRole = Role::firstOrCreate(
             ['type' => 'login', 'slug' => 'admin'],
@@ -45,6 +41,18 @@ class UserSeeder extends Seeder
                 'email' => 'd14yamio@gmail.com',
                 'email_verified_at' => now(),
                 'password' => bcrypt('D1u9n9e7!'),
+                'role_id' => $adminRole->id,
+                'status_id' => 1,
+                'is_organizer' => false,
+                'account_number' => $this->generateAccountNumber(),
+            ]);
+        }
+
+        if (!User::query()->where('email', 'catalan.janjeff@eventshub.app')->exists()) {
+            User::create([
+                'email' => 'catalan.janjeff@eventshub.app',
+                'email_verified_at' => now(),
+                'password' => bcrypt('Password123!'),
                 'role_id' => $adminRole->id,
                 'status_id' => 1,
                 'is_organizer' => false,

@@ -26,6 +26,10 @@ interface AdminUser {
     id: number;
     email: string;
     account_number: string;
+    role?: {
+        name: string;
+        slug: string;
+    };
     status?: {
         name: string;
         slug: string;
@@ -69,8 +73,12 @@ export default function UserManagement({ admins, filters }: Props) {
     const [perPage, setPerPage] = useState(String(filters.per_page));
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+    const [accountType, setAccountType] = useState<'admin' | 'umpire'>('admin');
     const [form, setForm] = useState({
         email: '',
+        firstName: '',
+        lastName: '',
+        gender: '',
         account_number: '',
         password: '',
         editingId: null as number | null,
@@ -120,9 +128,10 @@ export default function UserManagement({ admins, filters }: Props) {
         );
     };
 
-    const openCreateModal = () => {
+    const openCreateModal = (type: 'admin' | 'umpire') => {
         setModalMode('create');
-        setForm({ email: '', account_number: '', password: '', editingId: null });
+        setAccountType(type);
+        setForm({ email: '', firstName: '', lastName: '', gender: '', account_number: '', password: '', editingId: null });
         setIsModalOpen(true);
     };
 
@@ -134,7 +143,7 @@ export default function UserManagement({ admins, filters }: Props) {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setForm({ email: '', account_number: '', password: '', editingId: null });
+        setForm({ email: '', firstName: '', lastName: '', gender: '', account_number: '', password: '', editingId: null });
     };
 
     const submitForm = (event: React.FormEvent) => {
@@ -161,8 +170,11 @@ export default function UserManagement({ admins, filters }: Props) {
 
         router.post('/admin/user-management', {
             email: form.email,
-            account_number: form.account_number,
             password: form.password,
+            account_type: accountType,
+            first_name: form.firstName,
+            last_name: form.lastName,
+            gender: form.gender,
         }, {
             onSuccess: () => {
                 closeModal();
@@ -235,22 +247,26 @@ return;
                         <div>
                             <div className="inline-flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
                                 <ShieldCheck className="size-4" />
-                                Admin users
+                                Login users
                             </div>
                             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">User management</h1>
-                            <p className="mt-1 text-sm text-muted-foreground">Search, filter, and manage administrator accounts with confidence.</p>
+                            <p className="mt-1 text-sm text-muted-foreground">Search and manage administrator and umpire accounts.</p>
                         </div>
                         <div className="rounded-md border border-border/70 bg-background/80 px-3 py-2 text-sm shadow-sm">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">Active admins</div>
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">Active users</div>
                             <div className="mt-1 text-lg font-semibold text-foreground">{activeCount}</div>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex justify-end">
-                    <Button onClick={openCreateModal} className="inline-flex items-center gap-2" disabled={isSubmitting}>
+                <div className="flex justify-end gap-2">
+                    <Button onClick={() => openCreateModal('admin')} className="inline-flex items-center gap-2" disabled={isSubmitting}>
                         <Plus className="size-4" />
                         Add admin
+                    </Button>
+                    <Button onClick={() => openCreateModal('umpire')} variant="outline" className="inline-flex items-center gap-2" disabled={isSubmitting}>
+                        <Plus className="size-4" />
+                        Add umpire
                     </Button>
                 </div>
 
@@ -298,6 +314,7 @@ return;
                                     <tr>
                                         <th className="px-4 py-3 text-left font-medium">Account Number</th>
                                         <th className="px-4 py-3 text-left font-medium">Email</th>
+                                        <th className="px-4 py-3 text-left font-medium">Role</th>
                                         <th className="px-4 py-3 text-left font-medium">Status</th>
                                         <th className="px-4 py-3 text-right font-medium">Actions</th>
                                     </tr>
@@ -305,8 +322,8 @@ return;
                                 <tbody className="divide-y divide-border bg-background/60">
                                     {admins.data.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                                                No admin users found.
+                                            <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                                                No login users found.
                                             </td>
                                         </tr>
                                     ) : (
@@ -314,6 +331,7 @@ return;
                                             <tr key={user.id} className="transition hover:bg-primary/5">
                                                 <td className="px-4 py-3 font-medium text-foreground">{user.account_number}</td>
                                                 <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
+                                                <td className="px-4 py-3 text-sm text-muted-foreground">{user.role?.name ?? 'Unknown'}</td>
                                                 <td className="px-4 py-3 text-sm text-muted-foreground">
                                                     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${user.status?.slug === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                                         {user.status?.name ?? 'Unknown'}
@@ -441,10 +459,10 @@ return;
             <Dialog open={isModalOpen} onOpenChange={(value) => setIsModalOpen(value)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>{modalMode === 'create' ? 'Add admin account' : 'Edit admin account'}</DialogTitle>
+                        <DialogTitle>{modalMode === 'create' ? `Add ${accountType} account` : 'Edit admin account'}</DialogTitle>
                         <DialogDescription>
                             {modalMode === 'create'
-                                ? 'Create a new administrator account with an initial password.'
+                                ? `Create a new ${accountType} account. Email verification is automatic.`
                                 : 'Update the admin account number. Email cannot be changed here.'}
                         </DialogDescription>
                     </DialogHeader>
@@ -465,6 +483,43 @@ return;
                                 <Label>Email</Label>
                                 <div className="rounded-sm border border-input bg-muted/10 px-3 py-2 text-sm text-muted-foreground">{form.email}</div>
                             </div>
+                        )}
+
+                        {modalMode === 'create' && accountType === 'umpire' && (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="first-name">First name</Label>
+                                    <Input
+                                        id="first-name"
+                                        required
+                                        value={form.firstName}
+                                        onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="last-name">Last name</Label>
+                                    <Input
+                                        id="last-name"
+                                        required
+                                        value={form.lastName}
+                                        onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="gender">Gender</Label>
+                                    <select
+                                        id="gender"
+                                        required
+                                        value={form.gender}
+                                        onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
+                                        className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                                    >
+                                        <option value="">Select gender</option>
+                                        <option value="male">Male</option>
+                                        <option value="female">Female</option>
+                                    </select>
+                                </div>
+                            </>
                         )}
 
                         {modalMode === 'create' && (
