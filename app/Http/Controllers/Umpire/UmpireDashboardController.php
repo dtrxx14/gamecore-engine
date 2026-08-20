@@ -416,9 +416,17 @@ class UmpireDashboardController extends Controller
                     : $liveMatchScore->team_b_score;
                 $isWinningPoint = $servingScore >= $gameTo;
             } else {
-                // Decrement (undo) - undo the last point. We keep serving team and service number
-                // as-is since a proper full undo is complex; scores roll back.
-                $updateData[$teamField] = $newScore;
+                // Undo a side-out rally, including service-only transitions where no score changed.
+                if ($currentScore > 0) {
+                    $updateData[$teamField] = $newScore;
+                } elseif ($validated['team'] === $liveMatchScore->serving_team && $serviceNumber === 1) {
+                    // The serving team just received service after a side-out.
+                    $updateData['serving_team'] = $liveMatchScore->serving_team === 'team_a' ? 'team_b' : 'team_a';
+                    $updateData['service_number'] = 2;
+                } elseif ($validated['team'] !== $liveMatchScore->serving_team && $serviceNumber === 2) {
+                    // The receiving team just took the first server's rally.
+                    $updateData['service_number'] = 1;
+                }
             }
         } else {
             // Rally Point Scoring: the team that scores becomes the serving team

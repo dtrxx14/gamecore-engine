@@ -710,6 +710,11 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
             const teamName = isLeft ? leftTeamName : rightTeamName;
             const teamCourt = isLeft ? leftTeamCourt : rightTeamCourt;
             const teamLetter = isLeft ? 'A' : 'B';
+            const canUndoServiceTransition = isSideOut && rallyCount > 0 && (
+                (team === servingTeam && serviceNumber === 1) ||
+                (team !== servingTeam && serviceNumber === 2)
+            );
+            const canUndo = teamScores > 0 || canUndoServiceTransition;
 
             return (
                 <div className={`flex justify-center items-center relative overflow-hidden rounded-2xl shadow-xl transition-all duration-200 border border-primary/10 ${servingTeam === team ? 'scale-[1.02] ring-1 ring-primary/30' : ''}`}
@@ -741,11 +746,19 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                         </div>
                         {livePhase === 'playing' && (
                             <div className="w-full mt-3 grid grid-cols-2 gap-2 opacity-90 hover:opacity-100 transition-opacity">
-                                <button onClick={() => updateScore(team as 'team_a' | 'team_b', 'increment')} disabled={isSubmitting}
+                                <button
+                                    onClick={() => updateScore(team as 'team_a' | 'team_b', 'increment')}
+                                    disabled={isSubmitting}
+                                    aria-label={`Add point for ${teamName}`}
+                                    title={`Add point for ${teamName}`}
                                     className="flex items-center justify-center gap-1 rounded-xl bg-primary/20 py-4 text-primary hover:bg-primary/30 active:scale-95 transition-all disabled:opacity-40 font-black backdrop-blur-sm">
                                     <Plus className="h-6 w-6 sm:h-7 sm:w-7" />
                                 </button>
-                                <button onClick={() => updateScore(team as 'team_a' | 'team_b', 'decrement')} disabled={isSubmitting || teamScores <= 0}
+                                <button
+                                    onClick={() => updateScore(team as 'team_a' | 'team_b', 'decrement')}
+                                    disabled={isSubmitting || !canUndo}
+                                    aria-label={`Undo point for ${teamName}`}
+                                    title={`Undo point for ${teamName}`}
                                     className="flex items-center justify-center gap-1 rounded-xl bg-destructive/20 py-4 text-destructive hover:bg-destructive/30 active:scale-95 transition-all disabled:opacity-40 font-black backdrop-blur-sm">
                                     <Minus className="h-6 w-6 sm:h-7 sm:w-7" />
                                 </button>
