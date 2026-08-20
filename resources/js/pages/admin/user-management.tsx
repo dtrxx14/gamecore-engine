@@ -727,7 +727,7 @@ return;
                                 Cancel
                             </Button>
                             <Button type="submit" loading={isSubmitting}>
-                                {modalMode === 'create' ? 'Create admin' : 'Save changes'}
+                                {modalMode === 'create' ? (accountType === 'umpire' ? 'Create umpire' : 'Create admin') : 'Save changes'}
                             </Button>
                         </DialogFooter>
                     </form>
