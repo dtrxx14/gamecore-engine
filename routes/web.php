@@ -56,6 +56,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('admin/user-management/{user}/toggle-status', [UserManagementController::class, 'toggleStatus'])->name('admin.user-management.toggle-status');
         Route::post('admin/user-management/{user}/reset-password', [UserManagementController::class, 'resetPassword'])->name('admin.user-management.reset-password');
         Route::delete('admin/user-management/{user}', [UserManagementController::class, 'destroy'])->name('admin.user-management.destroy');
+        Route::post('admin/user-management/{user}/restore', [UserManagementController::class, 'restore'])->name('admin.user-management.restore');
 
         // Player management routes
         Route::get('admin/player-management', [PlayerManagementController::class, 'index'])->name('admin.player-management.index');

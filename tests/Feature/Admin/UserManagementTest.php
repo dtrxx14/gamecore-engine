@@ -108,6 +108,30 @@ test('admin can create an umpire with a verified profile', function () {
         ]);
 });
 
+test('admin can view and recover deleted login accounts', function () {
+    $deletedUser = User::factory()->create([
+        'email' => 'deleted@example.com',
+        'role_id' => $this->adminRole->id,
+        'status_id' => $this->activeStatus->id,
+    ]);
+    $deletedUser->delete();
+
+    $this
+        ->actingAs($this->admin)
+        ->get(route('admin.user-management.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/user-management')
+            ->where('deletedAdmins.0.email', 'deleted@example.com')
+            ->where('deletedAdmins.0.deleted_at', $deletedUser->deleted_at->toISOString()));
+
+    $this
+        ->actingAs($this->admin)
+        ->post(route('admin.user-management.restore', $deletedUser->id))
+        ->assertRedirect(route('admin.user-management.index'));
+
+    expect(User::withTrashed()->findOrFail($deletedUser->id)->deleted_at)->toBeNull();
+});
+
 test('admin can create, update, toggle status, and reset a password', function () {
     $response = $this
         ->actingAs($this->admin)

@@ -21,11 +21,13 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface AdminUser {
     id: number;
     email: string;
     account_number: string;
+    deleted_at?: string;
     role?: {
         name: string;
         slug: string;
@@ -55,25 +57,27 @@ interface PaginatedAdmins {
 
 interface Props {
     admins: PaginatedAdmins;
+    deletedAdmins: PaginatedAdmins;
     filters: {
         search: string;
         per_page: number;
     };
 }
 
-type ConfirmActionType = 'toggle-status' | 'reset-password' | 'delete';
+type ConfirmActionType = 'toggle-status' | 'reset-password' | 'delete' | 'recover';
 
 type ConfirmAction = {
     type: ConfirmActionType;
     user: AdminUser;
 } | null;
 
-export default function UserManagement({ admins, filters }: Props) {
+export default function UserManagement({ admins, deletedAdmins, filters }: Props) {
     const [search, setSearch] = useState(filters.search);
     const [perPage, setPerPage] = useState(String(filters.per_page));
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
     const [accountType, setAccountType] = useState<'admin' | 'umpire'>('admin');
+    const [accountTab, setAccountTab] = useState<'active' | 'deleted'>('active');
     const [form, setForm] = useState({
         email: '',
         firstName: '',
@@ -100,7 +104,11 @@ export default function UserManagement({ admins, filters }: Props) {
 
     const handleSearch = () => {
         setIsSearching(true);
-        updateList(1, perPage);
+        if (accountTab === 'deleted') {
+            updateDeletedList(1, perPage);
+        } else {
+            updateList(1, perPage);
+        }
     };
 
     const handlePageJump = (value: string) => {
@@ -110,7 +118,11 @@ export default function UserManagement({ admins, filters }: Props) {
             return;
         }
 
-        updateList(page, perPage);
+        if (accountTab === 'deleted') {
+            updateDeletedList(page, perPage);
+        } else {
+            updateList(page, perPage);
+        }
     };
 
     const updateList = (page: number, nextPerPage: string | null = null) => {
@@ -126,6 +138,25 @@ export default function UserManagement({ admins, filters }: Props) {
                 onFinish: () => setIsSearching(false),
             }
         );
+    };
+
+    const updateDeletedList = (page: number, nextPerPage: string | null = null) => {
+        const resolvedPerPage = nextPerPage ?? perPage;
+
+        router.get(
+            '/admin/user-management',
+            { search, per_page: resolvedPerPage, deleted_page: page },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onFinish: () => setIsSearching(false),
+            },
+        );
+    };
+
+    const recoverUser = (user: AdminUser) => {
+        setConfirmAction({ type: 'recover', user });
     };
 
     const openCreateModal = (type: 'admin' | 'umpire') => {
@@ -232,6 +263,17 @@ return;
             return;
         }
 
+        if (type === 'recover') {
+            router.post(`/admin/user-management/${user.id}/restore`, {}, {
+                preserveScroll: true,
+                onFinish: () => {
+                    setIsConfirming(null);
+                    setConfirmAction(null);
+                },
+            });
+            return;
+        }
+
         setConfirmAction(null);
     };
 
@@ -270,6 +312,13 @@ return;
                     </Button>
                 </div>
 
+                <Tabs value={accountTab} onValueChange={(value) => setAccountTab(value as 'active' | 'deleted')} className="w-full">
+                    <TabsList>
+                        <TabsTrigger value="active">Active accounts</TabsTrigger>
+                        <TabsTrigger value="deleted">Deleted accounts ({deletedAdmins.total})</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="active">
                 <Card className="border-border/70 shadow-[0_10px_30px_-24px_rgba(0,0,0,0.35)]">
                     <CardHeader className="flex flex-col gap-3 border-b border-border/70 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2">
@@ -454,6 +503,144 @@ return;
                         </div>
                     </CardContent>
                 </Card>
+                    </TabsContent>
+
+                    <TabsContent value="deleted">
+                        <Card className="border-border/70 shadow-[0_10px_30px_-24px_rgba(0,0,0,0.35)]">
+                            <CardHeader className="flex flex-col gap-3 border-b border-border/70 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Select value={perPage} onValueChange={(value) => {
+                                        setPerPage(value);
+                                        updateDeletedList(1, value);
+                                    }}>
+                                        <SelectTrigger className="w-[140px] rounded-md border-border/70">
+                                            <SelectValue placeholder="Per page" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="10">10 per page</SelectItem>
+                                            <SelectItem value="25">25 per page</SelectItem>
+                                            <SelectItem value="50">50 per page</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <div className="flex items-center gap-2 rounded-md border border-border/70 bg-background/80 px-3">
+                                        <Search className="size-4 text-muted-foreground" />
+                                        <Input
+                                            value={search}
+                                            onChange={(event) => setSearch(event.target.value)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter') {
+                                                    handleSearch();
+                                                }
+                                            }}
+                                            placeholder="Search deleted accounts"
+                                            className="h-8 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+                                        />
+                                    </div>
+                                    <Button className="rounded-md" onClick={handleSearch} loading={isSearching} disabled={isSearching}>Search</Button>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <div className="border-b border-border/70 px-6 py-4">
+                                    <h2 className="font-semibold text-foreground">Deleted accounts</h2>
+                                    <p className="text-sm text-muted-foreground">Recover deleted administrator and umpire accounts.</p>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-border text-sm">
+                                        <thead className="bg-muted/40">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left font-medium">Account Number</th>
+                                                <th className="px-4 py-3 text-left font-medium">Email</th>
+                                                <th className="px-4 py-3 text-left font-medium">Role</th>
+                                                <th className="px-4 py-3 text-left font-medium">Deleted At</th>
+                                                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-border bg-background/60">
+                                            {deletedAdmins.data.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                                                        No deleted accounts found.
+                                                    </td>
+                                                </tr>
+                                            ) : deletedAdmins.data.map((user) => (
+                                                <tr key={user.id} className="transition hover:bg-primary/5">
+                                                    <td className="px-4 py-3 font-medium text-foreground">{user.account_number}</td>
+                                                    <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
+                                                    <td className="px-4 py-3 text-muted-foreground">{user.role?.name ?? 'Unknown'}</td>
+                                                    <td className="px-4 py-3 text-muted-foreground">
+                                                        {user.deleted_at ? new Date(user.deleted_at).toLocaleString() : 'Unknown'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <Button size="sm" variant="outline" onClick={() => recoverUser(user)}>
+                                                            <RefreshCw className="mr-2 size-4" />
+                                                            Recover
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="flex flex-col gap-3 border-t border-border/70 bg-background/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <Button variant="outline" size="sm" disabled={deletedAdmins.current_page <= 1} onClick={() => updateDeletedList(deletedAdmins.current_page - 1)}>
+                                                <ChevronLeft className="mr-2 size-4" />
+                                                Previous
+                                            </Button>
+                                            <Button variant="outline" size="sm" disabled={deletedAdmins.current_page >= deletedAdmins.last_page} onClick={() => updateDeletedList(deletedAdmins.current_page + 1)}>
+                                                Next
+                                                <ChevronRight className="ml-2 size-4" />
+                                            </Button>
+                                        </div>
+                                        <p className="mt-2 text-sm text-muted-foreground">
+                                            Showing {deletedAdmins.from} to {deletedAdmins.to} of {deletedAdmins.total}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-muted-foreground">Jump to page</span>
+                                        <Input
+                                            type="text"
+                                            min="1"
+                                            max={deletedAdmins.last_page}
+                                            defaultValue={deletedAdmins.current_page}
+                                            className="w-24 rounded-md border-border/70"
+                                            data-deleted-page-jump-input
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter') {
+                                                    const page = Number((event.target as HTMLInputElement).value);
+
+                                                    if (!Number.isNaN(page)) {
+                                                        updateDeletedList(page);
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                const input = document.querySelector<HTMLInputElement>('[data-deleted-page-jump-input]');
+
+                                                if (input) {
+                                                    const page = Number(input.value);
+
+                                                    if (!Number.isNaN(page)) {
+                                                        updateDeletedList(page);
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            Go
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
 
             <Dialog open={isModalOpen} onOpenChange={(value) => setIsModalOpen(value)}>
@@ -553,12 +740,16 @@ return;
                         <DialogTitle>
                             {confirmAction?.type === 'delete'
                                 ? 'Delete admin user'
+                                : confirmAction?.type === 'recover'
+                                ? 'Recover account'
                                 : confirmAction?.type === 'reset-password'
                                 ? 'Reset password'
                                 : 'Change account status'}
                         </DialogTitle>
                         <DialogDescription>
                             {confirmAction?.type === 'delete' && 'This action permanently removes the admin user.'}
+                            {confirmAction?.type === 'recover' &&
+                                `Recover ${confirmAction.user.email} and return it to the active accounts list?`}
                             {confirmAction?.type === 'reset-password' &&
                                 'Reset the admin password to the default temporary password.'}
                             {confirmAction?.type === 'toggle-status' &&

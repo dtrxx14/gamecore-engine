@@ -34,8 +34,24 @@ class UserManagementController extends Controller
             ->paginate($perPage)
             ->appends($request->only(['search', 'per_page']));
 
+        $deletedAdmins = User::onlyTrashed()
+            ->with(['role', 'status'])
+            ->whereHas('role', fn ($query) => $query
+                ->where('type', 'login')
+                ->whereIn('slug', ['admin', 'umpire']))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery->where('email', 'like', "%{$search}%")
+                        ->orWhere('account_number', 'like', "%{$search}%");
+                });
+            })
+            ->latest('deleted_at')
+            ->paginate($perPage, ['*'], 'deleted_page')
+            ->appends($request->only(['search', 'per_page', 'page']));
+
         return inertia('admin/user-management', [
             'admins' => $admins,
+            'deletedAdmins' => $deletedAdmins,
             'filters' => [
                 'search' => $search,
                 'per_page' => $perPage,
@@ -107,6 +123,19 @@ class UserManagementController extends Controller
     public function destroy(User $user): RedirectResponse
     {
         $user->delete();
+
+        return to_route('admin.user-management.index');
+    }
+
+    public function restore(int $user): RedirectResponse
+    {
+        User::onlyTrashed()
+            ->whereKey($user)
+            ->whereHas('role', fn ($query) => $query
+                ->where('type', 'login')
+                ->whereIn('slug', ['admin', 'umpire']))
+            ->firstOrFail()
+            ->restore();
 
         return to_route('admin.user-management.index');
     }
