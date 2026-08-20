@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 interface AdminUser {
     id: number;
     email: string;
+    email_verified_at?: string | null;
     account_number: string;
     deleted_at?: string;
     role?: {
@@ -362,6 +363,7 @@ return;
                                 <thead className="bg-muted/40">
                                     <tr>
                                         <th className="px-4 py-3 text-left font-medium">Account Number</th>
+                                        <th className="px-4 py-3 text-left font-medium">Verified Email</th>
                                         <th className="px-4 py-3 text-left font-medium">Email</th>
                                         <th className="px-4 py-3 text-left font-medium">Role</th>
                                         <th className="px-4 py-3 text-left font-medium">Status</th>
@@ -379,6 +381,13 @@ return;
                                         admins.data.map((user) => (
                                             <tr key={user.id} className="transition hover:bg-primary/5">
                                                 <td className="px-4 py-3 font-medium text-foreground">{user.account_number}</td>
+                                                <td className="px-4 py-3 text-muted-foreground">
+                                                    {user.email_verified_at ? (
+                                                        <span className="text-emerald-500">Verified</span>
+                                                    ) : (
+                                                        <span className="text-amber-500">Not Verified</span>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
                                                 <td className="px-4 py-3 text-sm text-muted-foreground">{user.role?.name ?? 'Unknown'}</td>
                                                 <td className="px-4 py-3 text-sm text-muted-foreground">
