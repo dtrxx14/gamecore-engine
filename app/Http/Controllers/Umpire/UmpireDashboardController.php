@@ -1084,7 +1084,7 @@ class UmpireDashboardController extends Controller
 
         // Auto-advance: if next teams are defined, shift them to current and reset
         if ($liveMatchScore->next_team_a_id && $liveMatchScore->next_team_b_id) {
-            LiveMatchScore::create([
+            $nextMatch = LiveMatchScore::create([
                 'live_configuration_id' => $liveMatchScore->live_configuration_id,
                 'court_number' => $liveMatchScore->court_number,
                 'category_id' => $liveMatchScore->next_category_id,
@@ -1097,6 +1097,8 @@ class UmpireDashboardController extends Controller
                 'status_id' => $pendingStatus->id, // pending
                 'umpire_id' => null, // unassigned, admin can assign later
             ]);
+
+            $this->dispatchMatchScoreUpdate($nextMatch);
         }
 
         $liveMatchScore->load([
@@ -1149,7 +1151,7 @@ class UmpireDashboardController extends Controller
 
         if ($nextTeamAId && $nextTeamBId) {
             // Create a new LiveMatchScore for the next pending match on this court
-            LiveMatchScore::create([
+            $nextMatch = LiveMatchScore::create([
                 'live_configuration_id' => $liveMatchScore->live_configuration_id,
                 'court_number' => $liveMatchScore->court_number,
                 'category_id' => $nextCategoryId,
@@ -1162,6 +1164,8 @@ class UmpireDashboardController extends Controller
                 'status_id' => $pendingStatus->id, // pending
                 'umpire_id' => null, // unassigned, admin can assign later
             ]);
+
+            $this->dispatchMatchScoreUpdate($nextMatch);
         }
 
         // Reload to get fresh data
