@@ -929,6 +929,9 @@ class UmpireDashboardController extends Controller
                 'category_id' => $category->id,
                 'category_name' => $category->name,
                 'game_to' => $category->game_to ?? 21,
+                'win_by' => $category->win_by ?? 1,
+                'game_time' => $category->game_time,
+                'game_interval' => $category->game_interval,
                 'teams' => $teams,
             ];
         }

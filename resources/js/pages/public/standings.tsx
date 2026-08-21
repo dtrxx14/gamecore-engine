@@ -23,6 +23,9 @@ interface StandingsCategory {
     category_id: number;
     category_name: string;
     game_to: number;
+    win_by: number;
+    game_time: string | null;
+    game_interval: string | null;
     teams: StandingTeam[];
 }
 
@@ -202,6 +205,11 @@ return () => {
 
                         return {
                             ...existingCat,
+                            category_name: updatedCat.category_name ?? existingCat.category_name,
+                            game_to: updatedCat.game_to ?? existingCat.game_to,
+                            win_by: updatedCat.win_by ?? existingCat.win_by,
+                            game_time: updatedCat.game_time ?? existingCat.game_time,
+                            game_interval: updatedCat.game_interval ?? existingCat.game_interval,
                             teams: Array.isArray(updatedCat.teams) ? updatedCat.teams : existingCat.teams,
                         };
                     }),
@@ -376,7 +384,12 @@ const startPolling = () => {
                                                                 </div>
                                                                 <div>
                                                                     <h3 className="text-sm font-semibold text-slate-100">{category.category_name}</h3>
-                                                                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">First to {category.game_to}</p>
+                                                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                                                                        <span>First to {category.game_to}</span>
+                                                                        <span>Win by {category.win_by}</span>
+                                                                        {category.game_time && <span>{category.game_time} min game</span>}
+                                                                        {category.game_interval && <span>{category.game_interval} interval</span>}
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">

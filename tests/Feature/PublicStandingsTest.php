@@ -2,6 +2,7 @@
 
 use App\Models\LiveCategory;
 use App\Models\LiveConfiguration;
+use App\Models\LiveMatchScore;
 use App\Models\LiveStanding;
 use App\Models\LiveTeam;
 use App\Models\Status;
@@ -27,6 +28,9 @@ it('groups standings by configuration, category and team without double counting
         'live_configuration_id' => $configuration->id,
         'name' => 'Men\'s Singles',
         'game_to' => 21,
+        'win_by' => 2,
+        'game_time' => '15',
+        'game_interval' => '2',
     ]);
 
     $team = LiveTeam::create([
@@ -75,6 +79,11 @@ it('groups standings by configuration, category and team without double counting
         ->and($teams[0]['points_for'])->toBe(42)
         ->and($teams[0]['points_against'])->toBe(35)
         ->and($teams[0]['point_differential'])->toBe(7);
+
+    expect($response->json('data.0.categories.0.game_to'))->toBe(21)
+        ->and($response->json('data.0.categories.0.win_by'))->toBe(2)
+        ->and($response->json('data.0.categories.0.game_time'))->toBe('15')
+        ->and($response->json('data.0.categories.0.game_interval'))->toBe('2');
 });
 
 it('orders tied teams by win-loss, head-to-head, point differential, and total points scored', function () {
@@ -140,7 +149,7 @@ it('orders tied teams by win-loss, head-to-head, point differential, and total p
         'point_differential' => 10,
     ]);
 
-    \App\Models\LiveMatchScore::create([
+    LiveMatchScore::create([
         'live_configuration_id' => $configuration->id,
         'court_number' => 1,
         'category_id' => $category->id,
