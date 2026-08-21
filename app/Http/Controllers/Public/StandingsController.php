@@ -121,8 +121,9 @@ class StandingsController extends Controller
             $standings = LiveStanding::query()
                 ->where('live_configuration_id', $config->id)
                 ->where('category_id', $category->id)
-                ->groupBy('team_id')
                 ->select([
+                    'live_configuration_id',
+                    'category_id',
                     'team_id',
                     DB::raw('SUM(matches_played) as matches_played'),
                     DB::raw('SUM(wins) as wins'),
@@ -131,6 +132,7 @@ class StandingsController extends Controller
                     DB::raw('SUM(points_against) as points_against'),
                     DB::raw('SUM(point_differential) as point_differential'),
                 ])
+                ->groupBy('live_configuration_id', 'category_id', 'team_id')
                 ->get();
 
             $teams = [];
@@ -143,6 +145,7 @@ class StandingsController extends Controller
 
                 $latestMatch = LiveMatchScore::query()
                     ->where('live_configuration_id', $config->id)
+                    ->where('category_id', $category->id)
                     ->where(function ($q) use ($standing) {
                         $q->where('team_a_id', $standing->team_id)
                             ->orWhere('team_b_id', $standing->team_id);
