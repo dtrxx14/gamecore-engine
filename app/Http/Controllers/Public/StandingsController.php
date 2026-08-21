@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Public;
 use App\Http\Controllers\Controller;
 use App\Models\LiveConfiguration;
 use App\Models\LiveMatchScore;
-use App\Models\LiveTeam;
 
 class StandingsController extends Controller
 {
@@ -127,11 +126,27 @@ class StandingsController extends Controller
             $teamsById = [];
             $headToHead = [];
 
+            foreach ($category->teams as $team) {
+                $teamsById[(int) $team->id] = [
+                    'live_configuration_id' => $config->id,
+                    'category_id' => $category->id,
+                    'team_id' => (int) $team->id,
+                    'team_name' => $team->name,
+                    'court_number' => 0,
+                    'matches_played' => 0,
+                    'wins' => 0,
+                    'losses' => 0,
+                    'points_for' => 0,
+                    'points_against' => 0,
+                    'point_differential' => 0,
+                ];
+            }
+
             foreach ($matches as $match) {
                 $teamAId = (int) $match->team_a_id;
                 $teamBId = (int) $match->team_b_id;
-                $teamA = LiveTeam::find($teamAId);
-                $teamB = LiveTeam::find($teamBId);
+                $teamA = $category->teams->firstWhere('id', $teamAId);
+                $teamB = $category->teams->firstWhere('id', $teamBId);
 
                 if ($teamAId === $teamBId || ! $teamA || ! $teamB || $match->team_a_score === null || $match->team_b_score === null) {
                     continue;

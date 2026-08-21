@@ -525,6 +525,22 @@ class LiveConfigurationController extends Controller
             $teams = [];
             $headToHead = [];
 
+            foreach ($category->teams as $team) {
+                $teams[(int) $team->id] = [
+                    'id' => (int) $team->id,
+                    'live_configuration_id' => $configuration->id,
+                    'category_id' => $category->id,
+                    'team_id' => (int) $team->id,
+                    'team_name' => $team->name,
+                    'matches_played' => 0,
+                    'wins' => 0,
+                    'losses' => 0,
+                    'points_for' => 0,
+                    'points_against' => 0,
+                    'point_differential' => 0,
+                ];
+            }
+
             $matches = LiveMatchScore::query()
                 ->where('live_configuration_id', $configuration->id)
                 ->where('category_id', $category->id)
@@ -536,8 +552,8 @@ class LiveConfigurationController extends Controller
             foreach ($matches as $match) {
                 $teamAId = (int) $match->team_a_id;
                 $teamBId = (int) $match->team_b_id;
-                $teamA = LiveTeam::find($teamAId);
-                $teamB = LiveTeam::find($teamBId);
+                $teamA = $category->teams->firstWhere('id', $teamAId);
+                $teamB = $category->teams->firstWhere('id', $teamBId);
 
                 if ($teamAId === $teamBId || ! $teamA || ! $teamB || $match->team_a_score === null || $match->team_b_score === null) {
                     continue;

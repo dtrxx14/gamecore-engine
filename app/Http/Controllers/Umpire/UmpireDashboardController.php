@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Models\LiveConfiguration;
 use App\Models\LiveMatchScore;
 use App\Models\LiveStanding;
-use App\Models\LiveTeam;
 use App\Models\Status;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -902,9 +901,25 @@ class UmpireDashboardController extends Controller
 
         $teams = [];
 
+        foreach ($category->teams as $team) {
+            $teams[(int) $team->id] = [
+                'live_configuration_id' => $configuration->id,
+                'category_id' => $category->id,
+                'team_id' => (int) $team->id,
+                'team_name' => $team->name,
+                'court_number' => 0,
+                'matches_played' => 0,
+                'wins' => 0,
+                'losses' => 0,
+                'points_for' => 0,
+                'points_against' => 0,
+                'point_differential' => 0,
+            ];
+        }
+
         foreach ($matches as $match) {
-            $teamA = LiveTeam::find($match->team_a_id);
-            $teamB = LiveTeam::find($match->team_b_id);
+            $teamA = $category->teams->firstWhere('id', (int) $match->team_a_id);
+            $teamB = $category->teams->firstWhere('id', (int) $match->team_b_id);
 
             if ((int) $match->team_a_id === (int) $match->team_b_id || ! $teamA || ! $teamB || $match->team_a_score === null || $match->team_b_score === null) {
                 continue;
