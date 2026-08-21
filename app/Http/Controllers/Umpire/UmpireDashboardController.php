@@ -894,7 +894,12 @@ class UmpireDashboardController extends Controller
         $matches = LiveMatchScore::query()
             ->where('live_configuration_id', $configuration->id)
             ->where('category_id', $category->id)
-            ->whereNotNull('end_play_at')
+            ->where(function ($query) {
+                $query->whereNotNull('end_play_at')
+                    ->orWhereHas('status', fn ($status) => $status
+                        ->where('type', 'live-match')
+                        ->where('slug', 'completed'));
+            })
             ->whereNotNull('team_a_id')
             ->whereNotNull('team_b_id')
             ->get();

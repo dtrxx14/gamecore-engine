@@ -140,7 +140,6 @@ class LiveCourtsController extends Controller
                 'status',
             ])
             ->orderBy('updated_at', 'desc')
-            ->take(10)
             ->get();
 
         $courts = [];
