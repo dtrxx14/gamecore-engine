@@ -595,7 +595,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
         setIsSubmitting(true);
         try {
             // End the match first
-            await fetch(`${API_BASE}/${match.id}/end`, {
+            const response = await fetch(`${API_BASE}/${match.id}/end`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -605,6 +605,10 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                 },
                 body: JSON.stringify({}),
             });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error ?? 'The match could not be ended.');
+            }
             setLivePhase('finished');
             setShowWinnerConfirmation(false);
             // Redirect to summary page

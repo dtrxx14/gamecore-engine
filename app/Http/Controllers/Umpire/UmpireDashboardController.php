@@ -1050,6 +1050,16 @@ class UmpireDashboardController extends Controller
      */
     private function dispatchMatchScoreUpdate(LiveMatchScore $match): void
     {
+        $match->loadMissing([
+            'category',
+            'nextCategory',
+            'teamA',
+            'teamB',
+            'nextTeamA',
+            'nextTeamB',
+            'status',
+        ]);
+
         $configuration = LiveConfiguration::find($match->live_configuration_id);
         if (! $configuration) {
             return;
@@ -1078,6 +1088,13 @@ class UmpireDashboardController extends Controller
             'team_a_court' => $match->team_a_court,
             'team_b_court' => $match->team_b_court,
             'umpire_id' => $match->umpire_id,
+            'category' => $match->category,
+            'nextCategory' => $match->nextCategory,
+            'team_a' => $match->teamA,
+            'team_b' => $match->teamB,
+            'next_team_a' => $match->nextTeamA,
+            'next_team_b' => $match->nextTeamB,
+            'status' => $match->status,
             'status_id' => $match->status_id,
             'start_play_at' => $match->start_play_at?->toIso8601String(),
             'end_play_at' => $match->end_play_at?->toIso8601String(),
@@ -1098,8 +1115,24 @@ class UmpireDashboardController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
+        if ($liveMatchScore->end_play_at) {
+            return response()->json([
+                'success' => true,
+                'already_completed' => true,
+                'match' => $liveMatchScore,
+            ]);
+        }
+
         $completedStatus = Status::where('type', 'live-match')->where('slug', 'completed')->first();
         $pendingStatus = Status::where('type', 'live-match')->where('slug', 'pending')->first();
+
+        if (! $completedStatus) {
+            return response()->json(['error' => 'Completed match status is not configured.'], 422);
+        }
+
+        if ($liveMatchScore->next_team_a_id && $liveMatchScore->next_team_b_id && ! $pendingStatus) {
+            return response()->json(['error' => 'Pending match status is not configured.'], 422);
+        }
 
         // Persist standings BEFORE auto-advance (scores get reset)
         $this->persistStandings($liveMatchScore);
@@ -1155,12 +1188,31 @@ class UmpireDashboardController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
+        if ($liveMatchScore->end_play_at) {
+            return response()->json([
+                'success' => true,
+                'already_completed' => true,
+                'match' => $liveMatchScore,
+            ]);
+        }
+
         $validated = $request->validate([
             'winner' => 'required|in:team_a,team_b',
         ]);
 
         $completedStatus = Status::where('type', 'live-match')->where('slug', 'completed')->first();
         $pendingStatus = Status::where('type', 'live-match')->where('slug', 'pending')->first();
+        $nextTeamAId = $liveMatchScore->next_team_a_id;
+        $nextTeamBId = $liveMatchScore->next_team_b_id;
+        $nextCategoryId = $liveMatchScore->next_category_id;
+
+        if (! $completedStatus) {
+            return response()->json(['error' => 'Completed match status is not configured.'], 422);
+        }
+
+        if ($nextTeamAId && $nextTeamBId && ! $pendingStatus) {
+            return response()->json(['error' => 'Pending match status is not configured.'], 422);
+        }
 
         // Persist standings BEFORE creating next match (scores preserved here)
         $this->persistStandings($liveMatchScore);
@@ -1177,10 +1229,6 @@ class UmpireDashboardController extends Controller
         $this->dispatchMatchScoreUpdate($liveMatchScore);
 
         // Auto-advance: if next teams are defined, create a NEW match record for the next pending match
-        $nextTeamAId = $liveMatchScore->next_team_a_id;
-        $nextTeamBId = $liveMatchScore->next_team_b_id;
-        $nextCategoryId = $liveMatchScore->next_category_id;
-
         if ($nextTeamAId && $nextTeamBId) {
             // Create a new LiveMatchScore for the next pending match on this court
             $nextMatch = LiveMatchScore::create([
@@ -1222,6 +1270,14 @@ class UmpireDashboardController extends Controller
     {
         if ($liveMatchScore->umpire_id !== auth()->id()) {
             return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        if ($liveMatchScore->end_play_at) {
+            return response()->json([
+                'success' => true,
+                'already_completed' => true,
+                'match' => $liveMatchScore,
+            ]);
         }
 
         $categoryDetails = $liveMatchScore->load(['category']);
