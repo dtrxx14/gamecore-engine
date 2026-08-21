@@ -12,7 +12,6 @@ use App\Models\LiveTeam;
 use App\Models\Status;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Response;
 
 class UmpireDashboardController extends Controller
@@ -851,55 +850,7 @@ class UmpireDashboardController extends Controller
         }
 
         foreach ($config->categories as $category) {
-            $standings = LiveStanding::query()
-                ->where('live_configuration_id', $config->id)
-                ->where('category_id', $category->id)
-                ->select([
-                    'live_configuration_id',
-                    'category_id',
-                    'team_id',
-                    DB::raw('SUM(matches_played) as matches_played'),
-                    DB::raw('SUM(wins) as wins'),
-                    DB::raw('SUM(losses) as losses'),
-                    DB::raw('SUM(points_for) as points_for'),
-                    DB::raw('SUM(points_against) as points_against'),
-                    DB::raw('SUM(point_differential) as point_differential'),
-                ])
-                ->groupBy('live_configuration_id', 'category_id', 'team_id')
-                ->get();
-
-            $teams = [];
-
-            foreach ($standings as $standing) {
-                $team = LiveTeam::find($standing->team_id);
-                if (! $team) {
-                    continue;
-                }
-
-                $latestMatch = LiveMatchScore::query()
-                    ->where('live_configuration_id', $config->id)
-                    ->where('category_id', $category->id)
-                    ->where(function ($q) use ($standing) {
-                        $q->where('team_a_id', $standing->team_id)
-                            ->orWhere('team_b_id', $standing->team_id);
-                    })
-                    ->latest()
-                    ->first();
-
-                $teams[] = [
-                    'live_configuration_id' => $config->id,
-                    'category_id' => $category->id,
-                    'team_id' => $standing->team_id,
-                    'team_name' => $team->name,
-                    'court_number' => $latestMatch->court_number ?? 0,
-                    'matches_played' => (int) $standing->matches_played,
-                    'wins' => (int) $standing->wins,
-                    'losses' => (int) $standing->losses,
-                    'points_for' => (int) $standing->points_for,
-                    'points_against' => (int) $standing->points_against,
-                    'point_differential' => (int) $standing->point_differential,
-                ];
-            }
+            $teams = $this->buildMatchBasedStandings($config, $category);
 
             $headToHeadRecords = $this->buildHeadToHeadRecords($teams, $config->id, $category->id);
 
@@ -939,6 +890,60 @@ class UmpireDashboardController extends Controller
         broadcast(new StandingsUpdated($configuration, $standingsData));
     }
 
+    private function buildMatchBasedStandings(LiveConfiguration $configuration, $category): array
+    {
+        $matches = LiveMatchScore::query()
+            ->where('live_configuration_id', $configuration->id)
+            ->where('category_id', $category->id)
+            ->whereNotNull('end_play_at')
+            ->whereNotNull('team_a_id')
+            ->whereNotNull('team_b_id')
+            ->get();
+
+        $teams = [];
+
+        foreach ($matches as $match) {
+            $teamA = LiveTeam::find($match->team_a_id);
+            $teamB = LiveTeam::find($match->team_b_id);
+
+            if ((int) $match->team_a_id === (int) $match->team_b_id || ! $teamA || ! $teamB || $match->team_a_score === null || $match->team_b_score === null) {
+                continue;
+            }
+
+            // Count one game for each team column and apply each score to that team.
+            foreach ([[$teamA, $match->team_a_score, $match->team_b_score], [$teamB, $match->team_b_score, $match->team_a_score]] as [$team, $pointsFor, $pointsAgainst]) {
+                $teamId = (int) $team->id;
+                $teams[$teamId] ??= [
+                    'live_configuration_id' => $configuration->id,
+                    'category_id' => $category->id,
+                    'team_id' => $teamId,
+                    'team_name' => $team->name,
+                    'court_number' => $match->court_number,
+                    'matches_played' => 0,
+                    'wins' => 0,
+                    'losses' => 0,
+                    'points_for' => 0,
+                    'points_against' => 0,
+                    'point_differential' => 0,
+                ];
+                $teams[$teamId]['matches_played']++;
+                $teams[$teamId]['points_for'] += (int) $pointsFor;
+                $teams[$teamId]['points_against'] += (int) $pointsAgainst;
+                $teams[$teamId]['point_differential'] += (int) $pointsFor - (int) $pointsAgainst;
+            }
+
+            if ($match->team_a_score > $match->team_b_score) {
+                $teams[(int) $match->team_a_id]['wins']++;
+                $teams[(int) $match->team_b_id]['losses']++;
+            } elseif ($match->team_b_score > $match->team_a_score) {
+                $teams[(int) $match->team_b_id]['wins']++;
+                $teams[(int) $match->team_a_id]['losses']++;
+            }
+        }
+
+        return array_values($teams);
+    }
+
     /**
      * Build a head-to-head summary for teams tied on wins within a category.
      */
@@ -963,6 +968,7 @@ class UmpireDashboardController extends Controller
         $matches = LiveMatchScore::query()
             ->where('live_configuration_id', $configurationId)
             ->where('category_id', $categoryId)
+            ->whereNotNull('end_play_at')
             ->where(function ($query) use ($tiedTeamIds) {
                 $query->whereIn('team_a_id', $tiedTeamIds)
                     ->whereIn('team_b_id', $tiedTeamIds);

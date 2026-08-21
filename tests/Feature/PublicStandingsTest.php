@@ -3,7 +3,6 @@
 use App\Models\LiveCategory;
 use App\Models\LiveConfiguration;
 use App\Models\LiveMatchScore;
-use App\Models\LiveStanding;
 use App\Models\LiveTeam;
 use App\Models\Status;
 
@@ -39,31 +38,35 @@ it('groups standings by configuration, category and team without double counting
         'live_configuration_id' => $configuration->id,
         'player_ids' => [],
     ]);
-
-    LiveStanding::create([
-        'live_configuration_id' => $configuration->id,
+    $opponent = LiveTeam::create([
+        'name' => 'Team Beta',
         'category_id' => $category->id,
-        'team_id' => $team->id,
-        'court_number' => 1,
-        'matches_played' => 1,
-        'wins' => 1,
-        'losses' => 0,
-        'points_for' => 21,
-        'points_against' => 18,
-        'point_differential' => 3,
+        'live_configuration_id' => $configuration->id,
+        'player_ids' => [],
     ]);
 
-    LiveStanding::create([
+    LiveMatchScore::create([
         'live_configuration_id' => $configuration->id,
+        'court_number' => 1,
         'category_id' => $category->id,
-        'team_id' => $team->id,
+        'team_a_id' => $team->id,
+        'team_b_id' => $opponent->id,
+        'team_a_score' => 21,
+        'team_b_score' => 18,
+        'status_id' => 1,
+        'end_play_at' => now(),
+    ]);
+
+    LiveMatchScore::create([
+        'live_configuration_id' => $configuration->id,
         'court_number' => 2,
-        'matches_played' => 1,
-        'wins' => 1,
-        'losses' => 0,
-        'points_for' => 21,
-        'points_against' => 17,
-        'point_differential' => 4,
+        'category_id' => $category->id,
+        'team_a_id' => $team->id,
+        'team_b_id' => $opponent->id,
+        'team_a_score' => 21,
+        'team_b_score' => 17,
+        'status_id' => 1,
+        'end_play_at' => now(),
     ]);
 
     $response = $this->getJson('/api/standings');
@@ -123,30 +126,17 @@ it('orders tied teams by win-loss, head-to-head, point differential, and total p
         'player_ids' => [],
     ]);
 
-    LiveStanding::create([
-        'live_configuration_id' => $configuration->id,
+    $teamC = LiveTeam::create([
+        'name' => 'Team Charlie',
         'category_id' => $category->id,
-        'team_id' => $teamB->id,
-        'court_number' => 1,
-        'matches_played' => 2,
-        'wins' => 2,
-        'losses' => 0,
-        'points_for' => 60,
-        'points_against' => 50,
-        'point_differential' => 10,
+        'live_configuration_id' => $configuration->id,
+        'player_ids' => [],
     ]);
-
-    LiveStanding::create([
-        'live_configuration_id' => $configuration->id,
+    $teamD = LiveTeam::create([
+        'name' => 'Team Delta',
         'category_id' => $category->id,
-        'team_id' => $teamA->id,
-        'court_number' => 2,
-        'matches_played' => 2,
-        'wins' => 2,
-        'losses' => 0,
-        'points_for' => 60,
-        'points_against' => 50,
-        'point_differential' => 10,
+        'live_configuration_id' => $configuration->id,
+        'player_ids' => [],
     ]);
 
     LiveMatchScore::create([
@@ -158,6 +148,40 @@ it('orders tied teams by win-loss, head-to-head, point differential, and total p
         'team_a_score' => 21,
         'team_b_score' => 18,
         'status_id' => 1,
+        'end_play_at' => now(),
+    ]);
+    LiveMatchScore::create([
+        'live_configuration_id' => $configuration->id,
+        'court_number' => 2,
+        'category_id' => $category->id,
+        'team_a_id' => $teamA->id,
+        'team_b_id' => $teamC->id,
+        'team_a_score' => 21,
+        'team_b_score' => 17,
+        'status_id' => 1,
+        'end_play_at' => now(),
+    ]);
+    LiveMatchScore::create([
+        'live_configuration_id' => $configuration->id,
+        'court_number' => 1,
+        'category_id' => $category->id,
+        'team_a_id' => $teamB->id,
+        'team_b_id' => $teamC->id,
+        'team_a_score' => 21,
+        'team_b_score' => 18,
+        'status_id' => 1,
+        'end_play_at' => now(),
+    ]);
+    LiveMatchScore::create([
+        'live_configuration_id' => $configuration->id,
+        'court_number' => 2,
+        'category_id' => $category->id,
+        'team_a_id' => $teamB->id,
+        'team_b_id' => $teamD->id,
+        'team_a_score' => 21,
+        'team_b_score' => 19,
+        'status_id' => 1,
+        'end_play_at' => now(),
     ]);
 
     $response = $this->getJson('/api/standings');

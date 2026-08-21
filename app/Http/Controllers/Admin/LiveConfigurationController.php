@@ -166,63 +166,7 @@ class LiveConfigurationController extends Controller
             )
             ->get();
 
-        // Load standings grouped by category, with team data, sorted by win-loss record,
-        // then head-to-head, then point differential, then total points scored.
-        $standings = LiveStanding::query()
-            ->where('live_configuration_id', $liveConfiguration->id)
-            ->with(['team', 'category'])
-            ->get()
-            ->groupBy('category_id')
-            ->map(function ($categoryStandings) {
-                $categoryStandings = $categoryStandings->values()->all();
-
-                usort($categoryStandings, function ($left, $right) {
-                    if ($left->wins !== $right->wins) {
-                        return $right->wins <=> $left->wins;
-                    }
-
-                    $leftMatches = LiveMatchScore::query()
-                        ->where('live_configuration_id', $left->live_configuration_id)
-                        ->where('category_id', $left->category_id)
-                        ->where(function ($query) use ($left, $right) {
-                            $query->where(function ($subQuery) use ($left, $right) {
-                                $subQuery->where('team_a_id', $left->team_id)
-                                    ->where('team_b_id', $right->team_id);
-                            })->orWhere(function ($subQuery) use ($left, $right) {
-                                $subQuery->where('team_a_id', $right->team_id)
-                                    ->where('team_b_id', $left->team_id);
-                            });
-                        })
-                        ->get();
-
-                    $leftHeadToHeadWins = 0;
-                    $rightHeadToHeadWins = 0;
-
-                    foreach ($leftMatches as $match) {
-                        if ($match->team_a_id == $left->team_id && $match->team_b_id == $right->team_id) {
-                            $leftHeadToHeadWins += $match->team_a_score > $match->team_b_score ? 1 : 0;
-                            $rightHeadToHeadWins += $match->team_b_score > $match->team_a_score ? 1 : 0;
-                        }
-
-                        if ($match->team_a_id == $right->team_id && $match->team_b_id == $left->team_id) {
-                            $leftHeadToHeadWins += $match->team_b_score > $match->team_a_score ? 1 : 0;
-                            $rightHeadToHeadWins += $match->team_a_score > $match->team_b_score ? 1 : 0;
-                        }
-                    }
-
-                    if ($leftHeadToHeadWins !== $rightHeadToHeadWins) {
-                        return $rightHeadToHeadWins <=> $leftHeadToHeadWins;
-                    }
-
-                    if ($left->point_differential !== $right->point_differential) {
-                        return $right->point_differential <=> $left->point_differential;
-                    }
-
-                    return $right->points_for <=> $left->points_for;
-                });
-
-                return collect($categoryStandings)->values();
-            });
+        $standings = $this->buildMatchBasedStandings($liveConfiguration);
 
         return inertia('admin/live-configuration-show', [
             'configuration' => $liveConfiguration,
@@ -575,6 +519,93 @@ class LiveConfigurationController extends Controller
         return redirect()->back()->with('success', 'Match removed from court.');
     }
 
+    private function buildMatchBasedStandings(LiveConfiguration $configuration)
+    {
+        return $configuration->categories->mapWithKeys(function (LiveCategory $category) use ($configuration) {
+            $teams = [];
+            $headToHead = [];
+
+            $matches = LiveMatchScore::query()
+                ->where('live_configuration_id', $configuration->id)
+                ->where('category_id', $category->id)
+                ->whereNotNull('end_play_at')
+                ->whereNotNull('team_a_id')
+                ->whereNotNull('team_b_id')
+                ->get();
+
+            foreach ($matches as $match) {
+                $teamAId = (int) $match->team_a_id;
+                $teamBId = (int) $match->team_b_id;
+                $teamA = LiveTeam::find($teamAId);
+                $teamB = LiveTeam::find($teamBId);
+
+                if ($teamAId === $teamBId || ! $teamA || ! $teamB || $match->team_a_score === null || $match->team_b_score === null) {
+                    continue;
+                }
+
+                foreach ([[$teamAId, $teamA], [$teamBId, $teamB]] as [$teamId, $team]) {
+                    $teams[$teamId] ??= [
+                        'id' => $teamId,
+                        'live_configuration_id' => $configuration->id,
+                        'category_id' => $category->id,
+                        'team_id' => $teamId,
+                        'team_name' => $team->name,
+                        'matches_played' => 0,
+                        'wins' => 0,
+                        'losses' => 0,
+                        'points_for' => 0,
+                        'points_against' => 0,
+                        'point_differential' => 0,
+                    ];
+                }
+
+                $teams[$teamAId]['matches_played']++;
+                $teams[$teamBId]['matches_played']++;
+                $teams[$teamAId]['points_for'] += (int) $match->team_a_score;
+                $teams[$teamAId]['points_against'] += (int) $match->team_b_score;
+                $teams[$teamBId]['points_for'] += (int) $match->team_b_score;
+                $teams[$teamBId]['points_against'] += (int) $match->team_a_score;
+                $teams[$teamAId]['point_differential'] += $match->team_a_score - $match->team_b_score;
+                $teams[$teamBId]['point_differential'] += $match->team_b_score - $match->team_a_score;
+
+                if ($match->team_a_score > $match->team_b_score) {
+                    $teams[$teamAId]['wins']++;
+                    $teams[$teamBId]['losses']++;
+                    $headToHead[$teamAId][$teamBId] = ($headToHead[$teamAId][$teamBId] ?? 0) + 1;
+                } elseif ($match->team_b_score > $match->team_a_score) {
+                    $teams[$teamBId]['wins']++;
+                    $teams[$teamAId]['losses']++;
+                    $headToHead[$teamBId][$teamAId] = ($headToHead[$teamBId][$teamAId] ?? 0) + 1;
+                }
+            }
+
+            $teams = array_values($teams);
+            usort($teams, function (array $left, array $right) use ($headToHead): int {
+                if ($left['wins'] !== $right['wins']) {
+                    return $right['wins'] <=> $left['wins'];
+                }
+
+                $leftHeadToHeadWins = $headToHead[$left['team_id']][$right['team_id']] ?? 0;
+                $rightHeadToHeadWins = $headToHead[$right['team_id']][$left['team_id']] ?? 0;
+                if ($leftHeadToHeadWins !== $rightHeadToHeadWins) {
+                    return $rightHeadToHeadWins <=> $leftHeadToHeadWins;
+                }
+
+                if ($left['point_differential'] !== $right['point_differential']) {
+                    return $right['point_differential'] <=> $left['point_differential'];
+                }
+
+                return $right['points_for'] <=> $left['points_for'];
+            });
+
+            return [$category->id => collect($teams)->map(function (array $team, int $index): array {
+                $team['rank'] = $index + 1;
+
+                return $team;
+            })->values()];
+        });
+    }
+
     private function persistStandings(LiveMatchScore $match): void
     {
         if (! $match->team_a_id || ! $match->team_b_id || ! $match->category_id) {
@@ -618,39 +649,17 @@ class LiveConfigurationController extends Controller
             return;
         }
 
-        $standingsData = $configuration->categories->map(function (LiveCategory $category) use ($configurationId) {
-            $teams = LiveStanding::query()
-                ->where('live_configuration_id', $configurationId)
-                ->where('category_id', $category->id)
-                ->with('team')
-                ->get()
-                ->sort(function (LiveStanding $left, LiveStanding $right) {
-                    return [$right->wins, $right->point_differential, $right->points_for]
-                        <=> [$left->wins, $left->point_differential, $left->points_for];
-                })
-                ->values()
-                ->map(function (LiveStanding $standing, int $index) use ($category, $configurationId) {
-                    return [
-                        'live_configuration_id' => $configurationId,
-                        'category_id' => $category->id,
-                        'team_id' => $standing->team_id,
-                        'team_name' => $standing->team?->name,
-                        'rank' => $index + 1,
-                        'matches_played' => (int) $standing->matches_played,
-                        'wins' => (int) $standing->wins,
-                        'losses' => (int) $standing->losses,
-                        'points_for' => (int) $standing->points_for,
-                        'points_against' => (int) $standing->points_against,
-                        'point_differential' => (int) $standing->point_differential,
-                    ];
-                })->all();
-
+        $matchBasedStandings = $this->buildMatchBasedStandings($configuration);
+        $standingsData = $configuration->categories->map(function (LiveCategory $category) use ($configurationId, $matchBasedStandings) {
             return [
                 'live_configuration_id' => $configurationId,
                 'category_id' => $category->id,
                 'category_name' => $category->name,
                 'game_to' => $category->game_to,
-                'teams' => $teams,
+                'win_by' => $category->win_by ?? 1,
+                'game_time' => $category->game_time,
+                'game_interval' => $category->game_interval,
+                'teams' => ($matchBasedStandings->get($category->id) ?? collect())->all(),
             ];
         })->all();
 
