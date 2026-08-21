@@ -348,6 +348,7 @@ class LiveConfigurationController extends Controller
             'live_configuration_id' => ['required', 'integer', 'exists:live_configurations,id'],
             'name' => ['required', 'string', 'max:255'],
             'game_to' => ['required', 'integer', 'min:1', 'max:999'],
+            'win_by' => ['required', 'integer', 'min:1', 'max:999'],
             'game_time' => ['nullable', 'string', 'max:50'],
             'game_interval' => ['nullable', 'string', 'max:50'],
         ]);
@@ -362,6 +363,7 @@ class LiveConfigurationController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'game_to' => ['required', 'integer', 'min:1', 'max:999'],
+            'win_by' => ['required', 'integer', 'min:1', 'max:999'],
             'game_time' => ['nullable', 'string', 'max:50'],
             'game_interval' => ['nullable', 'string', 'max:50'],
         ]);

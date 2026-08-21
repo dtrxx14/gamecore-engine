@@ -171,6 +171,7 @@ class UmpireDashboardController extends Controller
         // Only flag winner in setup/show if match already has end_play_at (completed)
         // or if exactly one team reached game_to (to avoid false positives on undo)
         $gameTo = $liveMatchScore->category?->game_to ?? 21;
+        $winBy = $liveMatchScore->category?->win_by ?? 1;
         $winner = null;
         if ($liveMatchScore->end_play_at) {
             // Match completed - determine from final scores
@@ -180,12 +181,14 @@ class UmpireDashboardController extends Controller
                 $winner = 'team_b';
             }
         } else {
-            // Match still going - only if exactly one team >= game_to
-            $teamAAtGameTo = $liveMatchScore->team_a_score >= $gameTo;
-            $teamBAtGameTo = $liveMatchScore->team_b_score >= $gameTo;
-            if ($teamAAtGameTo && ! $teamBAtGameTo) {
+            // Match still going - require both game_to and the configured lead.
+            $teamAWon = $liveMatchScore->team_a_score >= $gameTo
+                && $liveMatchScore->team_a_score - $liveMatchScore->team_b_score >= $winBy;
+            $teamBWon = $liveMatchScore->team_b_score >= $gameTo
+                && $liveMatchScore->team_b_score - $liveMatchScore->team_a_score >= $winBy;
+            if ($teamAWon && ! $teamBWon) {
                 $winner = 'team_a';
-            } elseif ($teamBAtGameTo && ! $teamAAtGameTo) {
+            } elseif ($teamBWon && ! $teamAWon) {
                 $winner = 'team_b';
             }
         }
@@ -338,8 +341,15 @@ class UmpireDashboardController extends Controller
 
         if ($validated['action'] === 'increment') {
             $newScore = $currentScore + 1;
-            // Check if this is the winning point BEFORE updating rally count
-            $isWinningPoint = $newScore >= ($liveMatchScore->category?->game_to ?? 21);
+            $opponentScore = $validated['team'] === 'team_a'
+                ? $liveMatchScore->team_b_score
+                : $liveMatchScore->team_a_score;
+            $gameTo = $liveMatchScore->category?->game_to ?? 21;
+            $winBy = $liveMatchScore->category?->win_by ?? 1;
+            // A game is won only after reaching game_to and leading by win_by.
+            $isWinningPoint = (! $isSideOut || $validated['team'] === $liveMatchScore->serving_team)
+                && $newScore >= $gameTo
+                && $newScore - $opponentScore >= $winBy;
 
             if ($isWinningPoint) {
                 // Winning point: don't increment rally count or trigger player change
@@ -354,7 +364,11 @@ class UmpireDashboardController extends Controller
             // If the team being decremented had a score >= game_to, this was a winning point
             // Winning points don't increment rally_count, so undo shouldn't decrement it either
             $gameTo = $liveMatchScore->category?->game_to ?? 21;
-            $wasWinningPoint = $currentScore >= $gameTo;
+            $winBy = $liveMatchScore->category?->win_by ?? 1;
+            $opponentScore = $validated['team'] === 'team_a'
+                ? $liveMatchScore->team_b_score
+                : $liveMatchScore->team_a_score;
+            $wasWinningPoint = $currentScore >= $gameTo && $currentScore - $opponentScore >= $winBy;
 
             if ($wasWinningPoint) {
                 // Undoing a winning point: don't change rally_count
@@ -406,15 +420,6 @@ class UmpireDashboardController extends Controller
                     }
                 }
 
-                // Winning point must be scored by the serving team
-                // Read the serving team's score from the existing match record (the
-                // serving team's score key may not be present in $updateData when the
-                // receiving team won the rally, so we must not rely on it).
-                $gameTo = $liveMatchScore->category?->game_to ?? 21;
-                $servingScore = $liveMatchScore->serving_team === 'team_a'
-                    ? $liveMatchScore->team_a_score
-                    : $liveMatchScore->team_b_score;
-                $isWinningPoint = $servingScore >= $gameTo;
             } else {
                 // Undo a side-out rally, including service-only transitions where no score changed.
                 if ($currentScore > 0) {
@@ -446,6 +451,7 @@ class UmpireDashboardController extends Controller
         // Only check winner on INCREMENT: the team that just scored wins if they reach game_to
         // On DECREMENT: no winner (we're undoing the last point)
         $gameTo = $liveMatchScore->category?->game_to ?? 21;
+        $winBy = $liveMatchScore->category?->win_by ?? 1;
         $winner = null;
         if ($validated['action'] === 'increment') {
             if ($isSideOut) {
@@ -454,13 +460,17 @@ class UmpireDashboardController extends Controller
                 $servingScoreNow = $servingTeamNow === 'team_a'
                     ? $liveMatchScore->team_a_score
                     : $liveMatchScore->team_b_score;
-                if ($servingScoreNow >= $gameTo) {
+                $opponentScoreNow = $servingTeamNow === 'team_a'
+                    ? $liveMatchScore->team_b_score
+                    : $liveMatchScore->team_a_score;
+                if ($servingScoreNow >= $gameTo && $servingScoreNow - $opponentScoreNow >= $winBy) {
                     $winner = $servingTeamNow;
                 }
             } else {
                 $scoringTeam = $validated['team'];
                 $scoringScore = $scoringTeam === 'team_a' ? $liveMatchScore->team_a_score : $liveMatchScore->team_b_score;
-                if ($scoringScore >= $gameTo) {
+                $opponentScore = $scoringTeam === 'team_a' ? $liveMatchScore->team_b_score : $liveMatchScore->team_a_score;
+                if ($scoringScore >= $gameTo && $scoringScore - $opponentScore >= $winBy) {
                     $winner = $scoringTeam;
                 }
             }
@@ -730,6 +740,7 @@ class UmpireDashboardController extends Controller
         // (it's handled by updateScore which knows which team just scored).
         // So for polling, we only flag winner if match has ended already.
         $gameTo = $liveMatchScore->category?->game_to ?? 21;
+        $winBy = $liveMatchScore->category?->win_by ?? 1;
         $winner = null;
         if ($liveMatchScore->end_play_at) {
             // Match already ended - determine winner from final scores
@@ -739,17 +750,16 @@ class UmpireDashboardController extends Controller
                 $winner = 'team_b';
             }
         } else {
-            // Match still going - only flag winner if one team is >= game_to
-            // AND the other team is NOT also >= game_to (to avoid false positives)
-            // This prevents re-triggering winner modal after undo
-            $teamAAtGameTo = $liveMatchScore->team_a_score >= $gameTo;
-            $teamBAtGameTo = $liveMatchScore->team_b_score >= $gameTo;
-            if ($teamAAtGameTo && ! $teamBAtGameTo) {
+            // Match still going - require both game_to and the configured lead.
+            $teamAWon = $liveMatchScore->team_a_score >= $gameTo
+                && $liveMatchScore->team_a_score - $liveMatchScore->team_b_score >= $winBy;
+            $teamBWon = $liveMatchScore->team_b_score >= $gameTo
+                && $liveMatchScore->team_b_score - $liveMatchScore->team_a_score >= $winBy;
+            if ($teamAWon && ! $teamBWon) {
                 $winner = 'team_a';
-            } elseif ($teamBAtGameTo && ! $teamAAtGameTo) {
+            } elseif ($teamBWon && ! $teamAWon) {
                 $winner = 'team_b';
             }
-            // If both are >= game_to, no winner from polling (it's mid-game after undo)
         }
 
         // Check if player change is needed based on configuration
@@ -921,6 +931,85 @@ class UmpireDashboardController extends Controller
         }
 
         broadcast(new StandingsUpdated($configuration, $standingsData));
+    }
+
+    /**
+     * Build a head-to-head summary for teams tied on wins within a category.
+     */
+    private function buildHeadToHeadRecords(array $teams, int $configurationId, int $categoryId): array
+    {
+        if (count($teams) < 2) {
+            return [];
+        }
+
+        $highestWins = max(array_map(fn (array $team): int => $team['wins'], $teams));
+        $tiedTeamIds = array_values(array_map(
+            fn (array $team): int => $team['team_id'],
+            array_filter($teams, fn (array $team): bool => $team['wins'] === $highestWins)
+        ));
+
+        if (count($tiedTeamIds) < 2) {
+            return [];
+        }
+
+        $records = array_fill_keys($tiedTeamIds, ['wins' => 0, 'losses' => 0, 'matches' => 0]);
+
+        $matches = LiveMatchScore::query()
+            ->where('live_configuration_id', $configurationId)
+            ->where('category_id', $categoryId)
+            ->where(function ($query) use ($tiedTeamIds) {
+                $query->whereIn('team_a_id', $tiedTeamIds)
+                    ->whereIn('team_b_id', $tiedTeamIds);
+            })
+            ->get();
+
+        foreach ($matches as $match) {
+            $teamAId = (int) $match->team_a_id;
+            $teamBId = (int) $match->team_b_id;
+
+            if (! in_array($teamAId, $tiedTeamIds, true) || ! in_array($teamBId, $tiedTeamIds, true)) {
+                continue;
+            }
+
+            if ($match->team_a_score === null || $match->team_b_score === null) {
+                continue;
+            }
+
+            $records[$teamAId]['matches']++;
+            $records[$teamBId]['matches']++;
+
+            if ($match->team_a_score > $match->team_b_score) {
+                $records[$teamAId]['wins']++;
+                $records[$teamBId]['losses']++;
+            } elseif ($match->team_b_score > $match->team_a_score) {
+                $records[$teamBId]['wins']++;
+                $records[$teamAId]['losses']++;
+            }
+        }
+
+        return $records;
+    }
+
+    /**
+     * Compare head-to-head performance for teams tied on wins.
+     */
+    private function compareHeadToHead(int $leftTeamId, int $rightTeamId, array $headToHeadRecords, int $configurationId, int $categoryId): int
+    {
+        $leftMatches = $headToHeadRecords[$leftTeamId]['matches'] ?? 0;
+        $rightMatches = $headToHeadRecords[$rightTeamId]['matches'] ?? 0;
+
+        if ($leftMatches === 0 && $rightMatches === 0) {
+            return 0;
+        }
+
+        $leftWins = $headToHeadRecords[$leftTeamId]['wins'] ?? 0;
+        $rightWins = $headToHeadRecords[$rightTeamId]['wins'] ?? 0;
+
+        if ($leftWins !== $rightWins) {
+            return $rightWins <=> $leftWins;
+        }
+
+        return 0;
     }
 
     /**

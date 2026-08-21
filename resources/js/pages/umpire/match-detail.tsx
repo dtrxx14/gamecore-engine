@@ -15,6 +15,7 @@ interface LiveCategory {
     id: number;
     name: string;
     game_to: number;
+    win_by?: number;
     game_time: string | null;
     game_interval: string | null;
 }
@@ -156,6 +157,9 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
     const [serviceNumber, setServiceNumber] = useState<1 | 2>(isSideOut ? 2 : 1);
     // courtChangeDone: for side-out, the court change (change sides) is only allowed ONCE per match.
     const [courtChangeDone, setCourtChangeDone] = useState(false);
+
+    const gameTo = match.category?.game_to ?? 21;
+    const winBy = match.category?.win_by ?? 1;
 
     const { resolvedAppearance } = useAppearance();
 
@@ -357,6 +361,9 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                     setWinner(data.winner);
                     setShowWinnerConfirmation(true);
                     setShowPlayerChangeModal(false);
+                } else if (!data.winner && showWinnerConfirmation) {
+                    setWinner(null);
+                    setShowWinnerConfirmation(false);
                 }
 
                 // Check for player change trigger
@@ -506,7 +513,12 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                     setWinner(data.winner);
                     setShowWinnerConfirmation(true);
                     setShowPlayerChangeModal(false);
-                } else if (data.needs_player_change) {
+                } else {
+                    setWinner(null);
+                    setShowWinnerConfirmation(false);
+                }
+
+                if (data.needs_player_change) {
                     setShowPlayerChangeModal(true);
                 }
             }
@@ -850,6 +862,9 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                                 {/* Game to badge */}
                                 <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider ring-1 ${resolvedAppearance === 'dark' ? 'bg-white/5 text-white/50 ring-white/10' : 'bg-primary/5 text-primary/60 ring-primary/10'}`}>
                                     Game to {match.category?.game_to}
+                                </span>
+                                <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider ring-1 ${resolvedAppearance === 'dark' ? 'bg-white/5 text-white/50 ring-white/10' : 'bg-primary/5 text-primary/60 ring-primary/10'}`}>
+                                    Win by {match.category?.win_by ?? 1}
                                 </span>
 
                                 {/* Timer */}

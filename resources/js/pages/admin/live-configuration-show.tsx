@@ -48,6 +48,7 @@ interface LiveCategory {
     live_configuration_id: number;
     name: string;
     game_to: number;
+    win_by: number;
     game_time: string | null;
     game_interval: string | null;
 }
@@ -144,7 +145,7 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
     // ---- Category state ----
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<LiveCategory | null>(null);
-    const [categoryForm, setCategoryForm] = useState({ name: '', game_to: '11', game_time: '', game_interval: '' });
+    const [categoryForm, setCategoryForm] = useState({ name: '', game_to: '11', win_by: '1', game_time: '', game_interval: '' });
     const [categoryErrors, setCategoryErrors] = useState<Record<string, string>>({});
 
     // ---- Team state ----
@@ -351,12 +352,13 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
             setCategoryForm({
                 name: category.name,
                 game_to: String(category.game_to),
+                win_by: String(category.win_by ?? 1),
                 game_time: category.game_time ?? '',
                 game_interval: category.game_interval ?? '',
             });
         } else {
             setEditingCategory(null);
-            setCategoryForm({ name: '', game_to: '11', game_time: '', game_interval: '' });
+            setCategoryForm({ name: '', game_to: '11', win_by: '1', game_time: '', game_interval: '' });
         }
         setCategoryErrors({});
         setCategoryModalOpen(true);
@@ -366,11 +368,13 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
         const errs: Record<string, string> = {};
         if (!categoryForm.name.trim()) errs.name = 'Category name is required.';
         if (!categoryForm.game_to || Number(categoryForm.game_to) < 1) errs.game_to = 'Game to value is required.';
+        if (!categoryForm.win_by || Number(categoryForm.win_by) < 1) errs.win_by = 'Win by value is required.';
         if (Object.keys(errs).length > 0) { setCategoryErrors(errs); return; }
 
         const payload = {
             ...categoryForm,
             game_to: Number(categoryForm.game_to),
+            win_by: Number(categoryForm.win_by),
             game_time: categoryForm.game_time || null,
             game_interval: categoryForm.game_interval || null,
         };
@@ -772,6 +776,9 @@ if (teamA && teamB && teamA === teamB) {
                                                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                                                             <Target className="mr-0.5 h-2.5 w-2.5" />
                                                             Game to {cat.game_to}
+                                                        </Badge>
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                                            Win by {cat.win_by ?? 1}
                                                         </Badge>
                                                         {cat.game_time && (
                                                             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
@@ -1211,6 +1218,22 @@ if (teamA && teamB && teamA === teamB) {
                                 className="mt-1.5"
                             />
                             {categoryErrors.game_to && <p className="mt-1 text-sm text-destructive">{categoryErrors.game_to}</p>}
+                        </div>
+                        <div>
+                            <Label htmlFor="cat-win-by" className="text-sm font-medium">
+                                Win by (points) <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                                id="cat-win-by"
+                                type="number"
+                                min={1}
+                                max={999}
+                                value={categoryForm.win_by}
+                                onChange={(e) => setCategoryForm((prev) => ({ ...prev, win_by: e.target.value }))}
+                                className="mt-1.5"
+                            />
+                            {categoryErrors.win_by && <p className="mt-1 text-sm text-destructive">{categoryErrors.win_by}</p>}
+                            <p className="mt-1 text-xs text-muted-foreground">At 10-10, win by 2 requires 12-10 or another two-point lead.</p>
                         </div>
                         <div>
                             <Label htmlFor="cat-game-time" className="text-sm font-medium">Game time</Label>

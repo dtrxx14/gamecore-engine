@@ -10,12 +10,14 @@ class LiveCategory extends Model
         'live_configuration_id',
         'name',
         'game_to',
+        'win_by',
         'game_time',
         'game_interval',
     ];
 
     protected $casts = [
         'game_to' => 'integer',
+        'win_by' => 'integer',
     ];
 
     public function liveConfiguration()
@@ -33,4 +35,3 @@ class LiveCategory extends Model
         return $this->hasMany(LiveMatchScore::class, 'category_id');
     }
 }
-
