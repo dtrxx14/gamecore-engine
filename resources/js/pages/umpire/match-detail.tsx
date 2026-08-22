@@ -647,6 +647,9 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                 body: JSON.stringify({}),
             });
             const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error ?? 'The match could not be ended.');
+            }
             if (data.success) { 
                 setLivePhase('finished');
                 setShowWinnerConfirmation(false);

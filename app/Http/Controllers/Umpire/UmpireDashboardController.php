@@ -886,7 +886,11 @@ class UmpireDashboardController extends Controller
             ];
         }
 
-        broadcast(new StandingsUpdated($configuration, $standingsData));
+        try {
+            broadcast(new StandingsUpdated($configuration, $standingsData));
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function buildMatchBasedStandings(LiveConfiguration $configuration, $category): array
@@ -1102,7 +1106,11 @@ class UmpireDashboardController extends Controller
             'deleted' => false,
         ];
 
-        broadcast(new MatchScoreUpdated($configuration, $matchData));
+        try {
+            broadcast(new MatchScoreUpdated($configuration, $matchData));
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     /**
@@ -1134,15 +1142,18 @@ class UmpireDashboardController extends Controller
             return response()->json(['error' => 'Pending match status is not configured.'], 422);
         }
 
-        // Persist standings BEFORE auto-advance (scores get reset)
-        $this->persistStandings($liveMatchScore);
-        $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
-
         $liveMatchScore->update([
             'status_id' => $completedStatus->id,
             'end_play_at' => now(),
             'is_paused' => false,
         ]);
+
+        try {
+            $this->persistStandings($liveMatchScore);
+            $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
 
         // Dispatch real-time update so the public /courts page reflects the finished match
         $this->dispatchMatchScoreUpdate($liveMatchScore);
@@ -1214,16 +1225,19 @@ class UmpireDashboardController extends Controller
             return response()->json(['error' => 'Pending match status is not configured.'], 422);
         }
 
-        // Persist standings BEFORE creating next match (scores preserved here)
-        $this->persistStandings($liveMatchScore);
-        $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
-
         // Mark current match as completed (keep its scores intact)
         $liveMatchScore->update([
             'status_id' => $completedStatus->id ?? $liveMatchScore->status_id,
             'end_play_at' => now(),
             'is_paused' => false,
         ]);
+
+        try {
+            $this->persistStandings($liveMatchScore);
+            $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
 
         // Dispatch real-time update so the public /courts page reflects the finished match
         $this->dispatchMatchScoreUpdate($liveMatchScore);
