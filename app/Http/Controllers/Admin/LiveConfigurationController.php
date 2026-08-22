@@ -134,6 +134,11 @@ class LiveConfigurationController extends Controller
             ->with('category')
             ->latest('created_at')
             ->get();
+        $allGames = LiveMatchScore::query()
+            ->where('live_configuration_id', $liveConfiguration->id)
+            ->with(['category', 'teamA', 'teamB', 'nextTeamA', 'nextTeamB', 'status', 'umpire'])
+            ->latest('id')
+            ->get();
         $statuses = Status::query()->where('type', 'live-match')->get(['id', 'name', 'slug']);
 
         // Resolve player names for team display and team edit modal
@@ -171,6 +176,7 @@ class LiveConfigurationController extends Controller
         return inertia('admin/live-configuration-show', [
             'configuration' => $liveConfiguration,
             'teams' => $teams,
+            'allGames' => $allGames,
             'statuses' => $statuses,
             'players' => $players,
             'umpires' => $umpires,

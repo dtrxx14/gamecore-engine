@@ -136,9 +136,10 @@ interface Props {
     players: Player[];
     umpires: Player[];
     standings: Record<string, Standing[]>;
+    allGames: LiveMatchScore[];
 }
 
-export default function LiveConfigurationShow({ configuration: initialConfiguration, teams, statuses, players, umpires, standings: initialStandings }: Props) {
+export default function LiveConfigurationShow({ configuration: initialConfiguration, teams, statuses, players, umpires, standings: initialStandings, allGames }: Props) {
     const [configuration, setConfiguration] = useState<LiveConfigurationData>(initialConfiguration);
     const [standings, setStandings] = useState<Record<string, Standing[]>>(initialStandings);
 
@@ -603,6 +604,15 @@ if (teamA && teamB && teamA === teamB) {
         return team?.name ?? `Team #${teamId}`;
     };
 
+    const getPlayerNames = (team: LiveTeam | null | undefined) => {
+        if (!team?.player_ids?.length) return 'No players';
+
+        return team.player_ids.map((playerId) => {
+            const player = players.find((item) => item.id === playerId);
+            return player ? `${player.first_name} ${player.last_name}` : `Player #${playerId}`;
+        }).join(', ');
+    };
+
     const getCategoryName = (categoryId: number | null | undefined) => {
         if (!categoryId) return '—';
         const cat = configuration.categories?.find((c) => c.id === categoryId);
@@ -1014,6 +1024,67 @@ if (teamA && teamB && teamA === teamB) {
                                     );
                                 })
                             )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Courts Grid */}
+                {/* All live match records */}
+                <div className="rounded-xl border border-border/70 bg-card p-6 shadow-[0_10px_30px_-24px_rgba(0,0,0,0.35)]">
+                    <div className="mb-5 flex items-center gap-2">
+                        <Hourglass className="h-5 w-5 text-red-500" />
+                        <h2 className="text-lg font-semibold text-foreground">All games</h2>
+                        <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{allGames.length}</span>
+                    </div>
+                    {allGames.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-muted-foreground">No games recorded.</p>
+                    ) : (
+                        <div className="overflow-x-auto rounded-lg border border-border/60">
+                            <table className="w-full min-w-[1100px] text-left text-xs">
+                                <thead className="border-b border-border/60 bg-muted/30">
+                                    <tr>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Match ID</th>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Court</th>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Category</th>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Team A / Players</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-muted-foreground">Score</th>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Team B / Players</th>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Status</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-muted-foreground">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/60">
+                                    {allGames.map((game) => (
+                                        <tr key={game.id} className="hover:bg-primary/[0.02]">
+                                            <td className="px-3 py-3 font-mono font-semibold text-foreground">#{game.id}</td>
+                                            <td className="px-3 py-3 text-muted-foreground">{game.court_number}</td>
+                                            <td className="px-3 py-3 text-muted-foreground">{game.category?.name ?? `Category #${game.category_id}`}</td>
+                                            <td className="max-w-[250px] px-3 py-3">
+                                                <div className="font-medium text-foreground">{game.team_a?.name ?? `Team #${game.team_a_id}`}</div>
+                                                <div className="mt-1 text-[11px] text-muted-foreground">ID: {game.team_a_id ?? '—'} · {getPlayerNames(game.team_a)}</div>
+                                            </td>
+                                            <td className="px-3 py-3 text-center font-mono text-sm font-bold text-foreground">{game.team_a_score} - {game.team_b_score}</td>
+                                            <td className="max-w-[250px] px-3 py-3">
+                                                <div className="font-medium text-foreground">{game.team_b?.name ?? `Team #${game.team_b_id}`}</div>
+                                                <div className="mt-1 text-[11px] text-muted-foreground">ID: {game.team_b_id ?? '—'} · {getPlayerNames(game.team_b)}</div>
+                                            </td>
+                                            <td className="px-3 py-3 text-muted-foreground">{game.status?.name ?? `Status #${game.status_id}`}</td>
+                                            <td className="px-3 py-3 text-right">
+                                                <Button
+                                                    type="button"
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    className="inline-flex items-center gap-1"
+                                                    onClick={() => confirmRemoveCourt(game)}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                    Force delete
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                 </div>
@@ -1586,14 +1657,14 @@ if (teamA && teamB && teamA === teamB) {
             <Dialog open={removeCourtOpen} onOpenChange={setRemoveCourtOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Remove match from court</DialogTitle>
+                        <DialogTitle>Force delete live match</DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to remove the match on Court {removeCourtTarget?.court_number}? This will clear the team assignments and scores.
+                            Are you sure you want to permanently delete live match #{removeCourtTarget?.id}? This will remove its team assignments and scores.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => { setRemoveCourtOpen(false); setRemoveCourtTarget(null); }}>Cancel</Button>
-                        <Button variant="destructive" onClick={executeRemoveCourt}>Remove</Button>
+                        <Button variant="destructive" onClick={executeRemoveCourt}>Force delete</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
