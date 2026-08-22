@@ -164,6 +164,10 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
     // ---- Court state ----
     const [courtModalOpen, setCourtModalOpen] = useState(false);
     const [activeCourt, setActiveCourt] = useState<number | null>(null);
+    const [editingMatchId, setEditingMatchId] = useState<number | null>(null);
+    const [scoreEditTarget, setScoreEditTarget] = useState<LiveMatchScore | null>(null);
+    const [scoreEditForm, setScoreEditForm] = useState({ team_a_score: '', team_b_score: '' });
+    const [scoreEditSaving, setScoreEditSaving] = useState(false);
     const [courtForm, setCourtForm] = useState({
         category_id: '',
         next_category_id: '',
@@ -477,6 +481,7 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
 
     const openCourtModal = (courtNumber: number, existing?: LiveMatchScore) => {
         setActiveCourt(courtNumber);
+        setEditingMatchId(existing?.id ?? null);
         setCourtErrors({});
         if (existing) {
             setCourtForm({
@@ -548,7 +553,7 @@ if (teamA && teamB && teamA === teamB) {
         setCourtSaving(true);
 
         router.post('/admin/live-configuration/match-scores', {
-            id: activeCourt && getMatchForCourt(activeCourt)?.id ? getMatchForCourt(activeCourt)?.id : null,
+            id: editingMatchId ?? (activeCourt && getMatchForCourt(activeCourt)?.id ? getMatchForCourt(activeCourt)?.id : null),
             live_configuration_id: configuration.id,
             court_number: activeCourt,
             category_id: categoryId,
@@ -565,6 +570,7 @@ if (teamA && teamB && teamA === teamB) {
             preserveScroll: true,
             onSuccess: () => {
                 setCourtModalOpen(false);
+                setEditingMatchId(null);
                 setCourtSaving(false);
             },
             onError: (errors) => {
@@ -580,6 +586,28 @@ if (teamA && teamB && teamA === teamB) {
     const confirmRemoveCourt = (match: LiveMatchScore) => {
         setRemoveCourtTarget(match);
         setRemoveCourtOpen(true);
+    };
+
+    const openScoreEditModal = (match: LiveMatchScore) => {
+        setScoreEditTarget(match);
+        setScoreEditForm({ team_a_score: String(match.team_a_score ?? 0), team_b_score: String(match.team_b_score ?? 0) });
+    };
+
+    const saveGameScores = () => {
+        if (!scoreEditTarget) return;
+
+        setScoreEditSaving(true);
+        router.patch(`/admin/live-configuration/match-scores/${scoreEditTarget.id}/scores`, {
+            team_a_score: Number(scoreEditForm.team_a_score),
+            team_b_score: Number(scoreEditForm.team_b_score),
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setScoreEditTarget(null);
+                setScoreEditSaving(false);
+            },
+            onFinish: () => setScoreEditSaving(false),
+        });
     };
 
     const executeRemoveCourt = () => {
@@ -1046,9 +1074,9 @@ if (teamA && teamB && teamA === teamB) {
                                         <th className="px-3 py-2 font-semibold text-muted-foreground">Match ID</th>
                                         <th className="px-3 py-2 font-semibold text-muted-foreground">Court</th>
                                         <th className="px-3 py-2 font-semibold text-muted-foreground">Category</th>
-                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Team A / Players</th>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Team A players</th>
                                         <th className="px-3 py-2 text-center font-semibold text-muted-foreground">Score</th>
-                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Team B / Players</th>
+                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Team B players</th>
                                         <th className="px-3 py-2 font-semibold text-muted-foreground">Status</th>
                                         <th className="px-3 py-2 text-right font-semibold text-muted-foreground">Action</th>
                                     </tr>
@@ -1060,26 +1088,28 @@ if (teamA && teamB && teamA === teamB) {
                                             <td className="px-3 py-3 text-muted-foreground">{game.court_number}</td>
                                             <td className="px-3 py-3 text-muted-foreground">{game.category?.name ?? `Category #${game.category_id}`}</td>
                                             <td className="max-w-[250px] px-3 py-3">
-                                                <div className="font-medium text-foreground">{game.team_a?.name ?? `Team #${game.team_a_id}`}</div>
-                                                <div className="mt-1 text-[11px] text-muted-foreground">ID: {game.team_a_id ?? '—'} · {getPlayerNames(game.team_a)}</div>
+                                                <div className="font-medium text-foreground">{getPlayerNames(game.team_a)}</div>
+                                                <div className="mt-1 text-[11px] text-muted-foreground">Team: {game.team_a?.name ?? `Team #${game.team_a_id}`}</div>
+                                                <div className="text-[11px] text-muted-foreground">Team ID: {game.team_a_id ?? '—'}</div>
                                             </td>
                                             <td className="px-3 py-3 text-center font-mono text-sm font-bold text-foreground">{game.team_a_score} - {game.team_b_score}</td>
                                             <td className="max-w-[250px] px-3 py-3">
-                                                <div className="font-medium text-foreground">{game.team_b?.name ?? `Team #${game.team_b_id}`}</div>
-                                                <div className="mt-1 text-[11px] text-muted-foreground">ID: {game.team_b_id ?? '—'} · {getPlayerNames(game.team_b)}</div>
+                                                <div className="font-medium text-foreground">{getPlayerNames(game.team_b)}</div>
+                                                <div className="mt-1 text-[11px] text-muted-foreground">Team: {game.team_b?.name ?? `Team #${game.team_b_id}`}</div>
+                                                <div className="text-[11px] text-muted-foreground">Team ID: {game.team_b_id ?? '—'}</div>
                                             </td>
                                             <td className="px-3 py-3 text-muted-foreground">{game.status?.name ?? `Status #${game.status_id}`}</td>
                                             <td className="px-3 py-3 text-right">
-                                                <Button
-                                                    type="button"
-                                                    variant="destructive"
-                                                    size="sm"
-                                                    className="inline-flex items-center gap-1"
-                                                    onClick={() => confirmRemoveCourt(game)}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                    Force delete
-                                                </Button>
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button type="button" variant="outline" size="sm" onClick={() => openScoreEditModal(game)}>
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                                Update
+                                                            </Button>
+                                                            <Button type="button" variant="destructive" size="sm" className="inline-flex items-center gap-1" onClick={() => confirmRemoveCourt(game)}>
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                Force delete
+                                                            </Button>
+                                                        </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -1649,6 +1679,32 @@ if (teamA && teamB && teamA === teamB) {
                                 <Button type="button">Open standings</Button>
                             </a>
                         </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ============ Update Game Scores Dialog ============ */}
+            <Dialog open={scoreEditTarget !== null} onOpenChange={(open) => !open && setScoreEditTarget(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Update game scores</DialogTitle>
+                        <DialogDescription>
+                            Update live match #{scoreEditTarget?.id}: {scoreEditTarget?.team_a?.name ?? `Team #${scoreEditTarget?.team_a_id}`} vs {scoreEditTarget?.team_b?.name ?? `Team #${scoreEditTarget?.team_b_id}`}.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4 sm:grid-cols-2">
+                        <div className="grid gap-2">
+                            <Label htmlFor="all-game-team-a-score">{scoreEditTarget?.team_a?.name ?? `Team #${scoreEditTarget?.team_a_id}`} score</Label>
+                            <Input id="all-game-team-a-score" type="number" min={0} value={scoreEditForm.team_a_score} onChange={(event) => setScoreEditForm((current) => ({ ...current, team_a_score: event.target.value }))} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="all-game-team-b-score">{scoreEditTarget?.team_b?.name ?? `Team #${scoreEditTarget?.team_b_id}`} score</Label>
+                            <Input id="all-game-team-b-score" type="number" min={0} value={scoreEditForm.team_b_score} onChange={(event) => setScoreEditForm((current) => ({ ...current, team_b_score: event.target.value }))} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setScoreEditTarget(null)} disabled={scoreEditSaving}>Cancel</Button>
+                        <Button onClick={saveGameScores} loading={scoreEditSaving} disabled={scoreEditSaving}>Update scores</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

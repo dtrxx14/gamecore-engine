@@ -98,6 +98,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Live match score routes
         Route::post('admin/live-configuration/match-scores', [LiveConfigurationController::class, 'storeMatchScore'])->name('admin.live-configuration.match-scores.store');
         Route::put('admin/live-configuration/match-scores/{liveMatchScore}', [LiveConfigurationController::class, 'updateMatchScore'])->name('admin.live-configuration.match-scores.update');
+        Route::patch('admin/live-configuration/match-scores/{liveMatchScore}/scores', [LiveConfigurationController::class, 'updateGameScores'])->name('admin.live-configuration.match-scores.scores');
         Route::delete('admin/live-configuration/match-scores/{liveMatchScore}', [LiveConfigurationController::class, 'destroyMatchScore'])->name('admin.live-configuration.match-scores.destroy');
 
         // Player import routes

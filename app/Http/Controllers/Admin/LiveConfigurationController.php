@@ -501,6 +501,19 @@ class LiveConfigurationController extends Controller
         return redirect()->back()->with('success', 'Match score updated successfully.');
     }
 
+    public function updateGameScores(Request $request, LiveMatchScore $liveMatchScore): RedirectResponse
+    {
+        $validated = $request->validate([
+            'team_a_score' => ['required', 'integer', 'min:0'],
+            'team_b_score' => ['required', 'integer', 'min:0'],
+        ]);
+
+        $liveMatchScore->update($validated);
+        $this->dispatchStandingsEvent($liveMatchScore->live_configuration_id);
+
+        return redirect()->back()->with('success', 'Game scores updated successfully.');
+    }
+
     public function destroyMatchScore(LiveMatchScore $liveMatchScore): RedirectResponse
     {
         $previousUmpireId = $liveMatchScore->umpire_id;
