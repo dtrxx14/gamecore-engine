@@ -916,6 +916,7 @@ class UmpireDashboardController extends Controller
                 'category_id' => $category->id,
                 'team_id' => (int) $team->id,
                 'team_name' => $team->name,
+                'bracket' => $team->bracket,
                 'court_number' => 0,
                 'matches_played' => 0,
                 'wins' => 0,
@@ -942,6 +943,7 @@ class UmpireDashboardController extends Controller
                     'category_id' => $category->id,
                     'team_id' => $teamId,
                     'team_name' => $team->name,
+                    'bracket' => $team->bracket,
                     'court_number' => $match->court_number,
                     'matches_played' => 0,
                     'wins' => 0,
@@ -965,7 +967,35 @@ class UmpireDashboardController extends Controller
             }
         }
 
-        return array_values($teams);
+        $teams = array_values($teams);
+        usort($teams, function (array $left, array $right): int {
+            if ($left['bracket'] !== $right['bracket']) {
+                if ($left['bracket'] === null) {
+                    return 1;
+                }
+                if ($right['bracket'] === null) {
+                    return -1;
+                }
+
+                return $left['bracket'] <=> $right['bracket'];
+            }
+
+            if ($left['wins'] !== $right['wins']) {
+                return $right['wins'] <=> $left['wins'];
+            }
+
+            if ($left['point_differential'] !== $right['point_differential']) {
+                return $right['point_differential'] <=> $left['point_differential'];
+            }
+
+            return $right['points_for'] <=> $left['points_for'];
+        });
+
+        foreach ($teams as $index => $team) {
+            $teams[$index]['rank'] = $index + 1;
+        }
+
+        return $teams;
     }
 
     /**

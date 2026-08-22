@@ -137,6 +137,7 @@ class StandingsController extends Controller
                     'category_id' => $category->id,
                     'team_id' => (int) $team->id,
                     'team_name' => $team->name,
+                    'bracket' => $team->bracket,
                     'court_number' => 0,
                     'matches_played' => 0,
                     'wins' => 0,
@@ -195,8 +196,37 @@ class StandingsController extends Controller
             }
 
             $teams = array_values($teamsById);
+            $tripleTieDifferentials = [];
+            foreach (collect($teams)->groupBy(fn (array $team): string => ($team['bracket'] ?? 'none').':'.$team['wins']) as $tieGroup) {
+                if ($tieGroup->count() < 3) {
+                    continue;
+                }
 
-            usort($teams, function (array $left, array $right) use ($headToHead): int {
+                $tiedIds = $tieGroup->pluck('team_id')->all();
+                foreach ($matches as $match) {
+                    $teamAId = (int) $match->team_a_id;
+                    $teamBId = (int) $match->team_b_id;
+                    if (! in_array($teamAId, $tiedIds, true) || ! in_array($teamBId, $tiedIds, true)) {
+                        continue;
+                    }
+
+                    $tripleTieDifferentials[$teamAId] = ($tripleTieDifferentials[$teamAId] ?? 0) + $match->team_a_score - $match->team_b_score;
+                    $tripleTieDifferentials[$teamBId] = ($tripleTieDifferentials[$teamBId] ?? 0) + $match->team_b_score - $match->team_a_score;
+                }
+            }
+
+            usort($teams, function (array $left, array $right) use ($headToHead, $tripleTieDifferentials): int {
+                if ($left['bracket'] !== $right['bracket']) {
+                    if ($left['bracket'] === null) {
+                        return 1;
+                    }
+                    if ($right['bracket'] === null) {
+                        return -1;
+                    }
+
+                    return $left['bracket'] <=> $right['bracket'];
+                }
+
                 if ($left['wins'] !== $right['wins']) {
                     return $right['wins'] <=> $left['wins'];
                 }
@@ -207,8 +237,10 @@ class StandingsController extends Controller
                     return $rightHeadToHeadWins <=> $leftHeadToHeadWins;
                 }
 
-                if ($left['point_differential'] !== $right['point_differential']) {
-                    return $right['point_differential'] <=> $left['point_differential'];
+                $leftDifferential = $tripleTieDifferentials[$left['team_id']] ?? $left['point_differential'];
+                $rightDifferential = $tripleTieDifferentials[$right['team_id']] ?? $right['point_differential'];
+                if ($leftDifferential !== $rightDifferential) {
+                    return $rightDifferential <=> $leftDifferential;
                 }
 
                 return $right['points_for'] <=> $left['points_for'];

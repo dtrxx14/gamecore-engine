@@ -20,7 +20,7 @@ import {
     Hourglass,
     QrCode,
 } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import QRCode from 'react-qr-code';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,7 @@ interface LiveCategory {
 interface LiveTeam {
     id: number;
     name: string;
+    bracket: number | null;
     category_id: number | null;
     player_ids: number[];
     live_configuration_id?: number | null;
@@ -119,6 +120,7 @@ interface Standing {
     live_configuration_id: number;
     category_id: number;
     team_id: number;
+    bracket: number | null;
     matches_played: number;
     wins: number;
     losses: number;
@@ -152,7 +154,7 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
     // ---- Team state ----
     const [teamModalOpen, setTeamModalOpen] = useState(false);
     const [editingTeam, setEditingTeam] = useState<LiveTeam | null>(null);
-    const [teamForm, setTeamForm] = useState({ name: '', category_id: '', player_ids: '' });
+    const [teamForm, setTeamForm] = useState({ name: '', bracket: '', category_id: '', player_ids: '' });
     const [teamErrors, setTeamErrors] = useState<Record<string, string>>({});
     const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
 
@@ -422,6 +424,7 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
             setEditingTeam(team);
             setTeamForm({
                 name: team.name,
+                bracket: team.bracket ? String(team.bracket) : '',
                 category_id: String(team.category_id ?? ''),
                 player_ids: (team.player_ids ?? []).join(', '),
             });
@@ -429,7 +432,7 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
             setSelectedPlayers(teamPlayers);
         } else {
             setEditingTeam(null);
-            setTeamForm({ name: '', category_id: '', player_ids: '' });
+            setTeamForm({ name: '', bracket: '', category_id: '', player_ids: '' });
             setSelectedPlayers([]);
         }
         setTeamErrors({});
@@ -444,6 +447,7 @@ export default function LiveConfigurationShow({ configuration: initialConfigurat
         const playerIds = selectedPlayers.map((p) => p.id);
         const payload = {
             name: teamForm.name,
+            bracket: teamForm.bracket ? Number(teamForm.bracket) : null,
             category_id: teamForm.category_id ? Number(teamForm.category_id) : null,
             player_ids: playerIds,
             live_configuration_id: configuration.id,
@@ -908,6 +912,7 @@ if (teamA && teamB && teamA === teamB) {
                                                     </div>
                                                     <div>
                                                         <span className="text-sm font-medium text-foreground">{team.name}</span>
+                                                        {team.bracket && <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">Bracket {team.bracket}</Badge>}
                                                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                                             {cat && (
                                                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
@@ -993,7 +998,7 @@ if (teamA && teamB && teamA === teamB) {
                                                     <thead>
                                                         <tr className="border-b border-border/60 bg-muted/30">
                                                             <th className="px-3 py-2 font-semibold text-muted-foreground w-10">#</th>
-                                                            <th className="px-3 py-2 font-semibold text-muted-foreground">Team</th>
+                                                                        <th className="px-3 py-2 font-semibold text-muted-foreground">Team / Bracket</th>
                                                             <th className="px-3 py-2 font-semibold text-muted-foreground text-end w-32">MP</th>
                                                             <th className="px-3 py-2 font-semibold text-muted-foreground text-end w-32">W</th>
                                                             <th className="px-3 py-2 font-semibold text-muted-foreground text-end w-32">L</th>
@@ -1003,16 +1008,26 @@ if (teamA && teamB && teamA === teamB) {
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {categoryStandings.map((standing, index) => {
-                                                            const teamName = standing.team?.name ?? getTeamName(standing.team_id);
+                                                                            {categoryStandings.map((standing, index) => {
+                                                                            const teamName = standing.team?.name ?? getTeamName(standing.team_id);
                                                             const isPlayingNow = configuration.match_scores?.some(
                                                                 (m) => (m.team_a_id === standing.team_id || m.team_b_id === standing.team_id) && m.status?.slug !== 'completed'
                                                             );
+                                                            const previousStanding = categoryStandings[index - 1];
+                                                            const startsBracket = index === 0 || standing.bracket !== previousStanding?.bracket;
+
                                                             return (
-                                                                <tr
-                                                                    key={standing.id}
+                                                                <Fragment key={standing.id}>
+                                                                    {startsBracket && (
+                                                                        <tr className="border-b border-border/40 bg-muted/40">
+                                                                            <td colSpan={8} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                                                                {standing.bracket === null ? 'Unbracketed teams' : `Bracket ${standing.bracket}`}
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                    <tr
                                                                     className={`border-b border-border/40 transition hover:bg-primary/[0.02] ${isPlayingNow ? 'bg-red-500/5 font-medium' : ''}`}
-                                                                >
+                                                                    >
                                                                     <td className="px-3 py-2">
                                                                         <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
                                                                             index === 0 ? 'bg-amber-500/15 text-amber-600' :
@@ -1026,6 +1041,7 @@ if (teamA && teamB && teamA === teamB) {
                                                                     <td className="px-3 py-2">
                                                                         <div className="flex items-center gap-2">
                                                                             <span className="text-sm font-medium text-foreground">{teamName}</span>
+                                                                            {standing.bracket !== null && <span className="ml-2 text-[10px] text-muted-foreground">Bracket {standing.bracket}</span>}
                                                                             {isPlayingNow && (
                                                                                 <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                                                                             )}
@@ -1042,7 +1058,8 @@ if (teamA && teamB && teamA === teamB) {
                                                                     }`}>
                                                                         {standing.point_differential > 0 ? '+' : ''}{standing.point_differential}
                                                                     </td>
-                                                                </tr>
+                                                                    </tr>
+                                                                </Fragment>
                                                             );
                                                         })}
                                                     </tbody>
@@ -1388,6 +1405,19 @@ if (teamA && teamB && teamA === teamB) {
                                 className="mt-1.5"
                             />
                             {teamErrors.name && <p className="mt-1 text-sm text-destructive">{teamErrors.name}</p>}
+                        </div>
+                        <div>
+                            <Label htmlFor="team-bracket" className="text-sm font-medium">Bracket number</Label>
+                            <Input
+                                id="team-bracket"
+                                type="number"
+                                min={1}
+                                max={999}
+                                value={teamForm.bracket}
+                                onChange={(e) => setTeamForm((prev) => ({ ...prev, bracket: e.target.value }))}
+                                placeholder="Optional"
+                                className="mt-1.5"
+                            />
                         </div>
                         <div>
                             <Label htmlFor="team-category" className="text-sm font-medium">Category</Label>

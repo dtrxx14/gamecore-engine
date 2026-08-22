@@ -59,6 +59,7 @@ class PlayerImport
      * Cached role/status IDs.
      */
     protected int $playerRoleId;
+
     protected int $activeStatusId;
 
     public function __construct(int $liveConfigurationId)
@@ -79,9 +80,9 @@ class PlayerImport
         $extension = $extension ? strtolower($extension) : strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
 
         $reader = match ($extension) {
-            'csv' => new CsvReader(),
-            'ods' => new OdsReader(),
-            'xlsx', 'xls' => new XlsxReader(),
+            'csv' => new CsvReader,
+            'ods' => new OdsReader,
+            'xlsx', 'xls' => new XlsxReader,
             default => throw new \InvalidArgumentException("Unsupported file extension: .{$extension}"),
         };
 
@@ -97,6 +98,7 @@ class PlayerImport
                 // Skip header row
                 if ($isFirstRow) {
                     $isFirstRow = false;
+
                     continue;
                 }
 
@@ -106,7 +108,7 @@ class PlayerImport
                     $this->processRow($cells);
                 } catch (\Exception $e) {
                     $this->results['errors'][] =
-                        'Row ' . $this->results['total_rows'] . ': ' . $e->getMessage();
+                        'Row '.$this->results['total_rows'].': '.$e->getMessage();
                 }
             }
         }
@@ -124,8 +126,9 @@ class PlayerImport
      * 1 - First Name
      * 2 - Last Name
      * 3 - Team
-     * 4 - Team Number
+     * 4 - Team Number (ignored; Team is the team identity)
      * 5 - Category
+     * 6 - Bracket (optional)
      */
     protected function processRow(array $cells): void
     {
@@ -133,18 +136,20 @@ class PlayerImport
         $firstName = trim((string) ($cells[1] ?? ''));
         $lastName = trim((string) ($cells[2] ?? ''));
         $teamName = trim((string) ($cells[3] ?? ''));
-        $teamNumber = trim((string) ($cells[4] ?? ''));
         $categoryName = trim((string) ($cells[5] ?? ''));
+        $bracket = trim((string) ($cells[6] ?? ''));
+        $bracketNumber = filter_var($bracket, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
 
         // Validate required fields
         if (empty($firstName) || empty($lastName)) {
             $this->results['skipped_users']++;
             $this->results['errors'][] = "Row {$this->results['total_rows']}: Missing first name or last name for '{$fullName}'";
+
             return;
         }
 
         // Generate email from full name if available, otherwise from first+last
-        $emailBase = !empty($fullName) ? $fullName : $firstName . ' ' . $lastName;
+        $emailBase = ! empty($fullName) ? $fullName : $firstName.' '.$lastName;
         $email = $this->generateEmail($emailBase);
 
         // Check if user already exists by email
@@ -152,6 +157,7 @@ class PlayerImport
         if ($existingUser) {
             $this->results['skipped_users']++;
             $this->results['errors'][] = "Row {$this->results['total_rows']}: User with email '{$email}' already exists (skipped)";
+
             return;
         }
 
@@ -175,15 +181,12 @@ class PlayerImport
         $this->results['created_users']++;
 
         // Process category
-        if (!empty($categoryName)) {
+        if (! empty($categoryName)) {
             $category = $this->getOrCreateCategory($categoryName);
 
             // Process team
-            if (!empty($teamName) && !empty($teamNumber)) {
-                $fullTeamName = $teamName . ' ' . $teamNumber;
-                $this->getOrCreateTeam($fullTeamName, $category, $user->id);
-            } elseif (!empty($teamName)) {
-                $this->getOrCreateTeam($teamName, $category, $user->id);
+            if (! empty($teamName)) {
+                $this->getOrCreateTeam($teamName, $category, $user->id, $bracketNumber);
             }
         }
     }
@@ -198,6 +201,7 @@ class PlayerImport
         // Check cache first
         if (isset($this->categoryCache[$normalizedName])) {
             $this->results['found_categories']++;
+
             return $this->categoryCache[$normalizedName];
         }
 
@@ -209,6 +213,7 @@ class PlayerImport
         if ($category) {
             $this->categoryCache[$normalizedName] = $category;
             $this->results['found_categories']++;
+
             return $category;
         }
 
@@ -244,22 +249,33 @@ class PlayerImport
     /**
      * Get existing team or create a new one, adding the player to it.
      */
-    protected function getOrCreateTeam(string $teamName, LiveCategory $category, int $userId): LiveTeam
+    protected function getOrCreateTeam(string $teamName, LiveCategory $category, int $userId, ?int $bracket = null): LiveTeam
     {
         // Look for existing team with same name in this category and configuration
-        $team = LiveTeam::where('name', $teamName)
+        $team = LiveTeam::whereRaw('LOWER(name) = ?', [strtolower($teamName)])
             ->where('category_id', $category->id)
             ->where('live_configuration_id', $this->liveConfigurationId)
             ->first();
 
         if ($team) {
+            $teamUpdates = [];
+
             // Update player_ids if user not already in the team
             $playerIds = $team->player_ids ?? [];
-            if (!in_array($userId, $playerIds)) {
+            if (! in_array($userId, $playerIds)) {
                 $playerIds[] = $userId;
-                $team->update(['player_ids' => $playerIds]);
+                $teamUpdates['player_ids'] = $playerIds;
                 $this->results['updated_teams']++;
             }
+
+            if ($bracket !== null && $team->bracket !== $bracket) {
+                $teamUpdates['bracket'] = $bracket;
+            }
+
+            if (! empty($teamUpdates)) {
+                $team->update($teamUpdates);
+            }
+
             return $team;
         }
 
@@ -269,6 +285,7 @@ class PlayerImport
             'name' => $teamName,
             'category_id' => $category->id,
             'player_ids' => [$userId],
+            'bracket' => $bracket,
         ]);
 
         $this->results['created_teams']++;
@@ -282,11 +299,11 @@ class PlayerImport
     protected function generateEmail(string $name): string
     {
         $base = Str::slug($name, '.');
-        $email = $base . '@gamecore.test';
+        $email = $base.'@gamecore.test';
 
         // If email already exists, append a random suffix
         if (User::where('email', $email)->exists()) {
-            $email = $base . '.' . Str::random(4) . '@gamecore.test';
+            $email = $base.'.'.Str::random(4).'@gamecore.test';
         }
 
         return strtolower($email);
@@ -307,7 +324,6 @@ class PlayerImport
             $sequence = $lastSequence + 1;
         }
 
-        return $today . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+        return $today.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
 }
-

@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { useEffect, useState, useRef } from 'react';
+import { Fragment, useEffect, useState, useRef } from 'react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Trophy, TrendingUp, TrendingDown, Minus, Medal, Swords, Clock, ChevronDown, ChevronRight, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface StandingTeam {
     rank: number;
     team_id: number;
     team_name: string;
+    bracket: number | null;
     court_number: number;
     matches_played: number;
     wins: number;
@@ -430,11 +431,21 @@ const startPolling = () => {
                                                                                 const medalClasses = ['text-amber-300', 'text-slate-300', 'text-amber-500'];
                                                                                 const rowClasses = ['bg-red-500/5', 'bg-white/5', 'bg-red-500/10'];
 
+                                                                                const previousTeam = filteredTeams[index - 1];
+                                                                                const startsBracket = index === 0 || team.bracket !== previousTeam?.bracket;
+
                                                                                 return (
-                                                                                    <tr
-                                                                                        key={`${team.live_configuration_id}-${team.category_id}-${team.team_id}`}
+                                                                                    <Fragment key={`${team.live_configuration_id}-${team.category_id}-${team.team_id}`}>
+                                                                                        {startsBracket && (
+                                                                                            <tr className="border-b border-red-500/10 bg-red-500/5">
+                                                                                                <td colSpan={8} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-red-300">
+                                                                                                    {team.bracket === null ? 'Unbracketed teams' : `Bracket ${team.bracket}`}
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        )}
+                                                                                        <tr
                                                                                         className={`border-b border-red-500/5 transition-colors hover:bg-red-500/5 ${isTop3 ? rowClasses[index] : ''}`}
-                                                                                    >
+                                                                                        >
                                                                                         <td className="py-2.5 pr-2">
                                                                                             {isTop3 ? (
                                                                                                 <span className={`inline-flex items-center justify-center ${medalClasses[index]}`}>
@@ -450,6 +461,7 @@ const startPolling = () => {
                                                                                         </td>
                                                                                         <td className="max-w-[180px] truncate px-2 font-medium text-white sm:max-w-[220px]">
                                                                                             {team.team_name}
+                                                                                            {team.bracket !== null && <span className="ml-2 text-[10px] text-red-300">Bracket {team.bracket}</span>}
                                                                                         </td>
                                                                                         <td className="px-2 text-center text-slate-300">{team.matches_played}</td>
                                                                                         <td className="px-2 text-center text-emerald-400">{team.wins}</td>
@@ -477,7 +489,8 @@ const startPolling = () => {
                                                                                                 {team.point_differential}
                                                                                             </span>
                                                                                         </td>
-                                                                                    </tr>
+                                                                                        </tr>
+                                                                                    </Fragment>
                                                                                 );
                                                                             })}
                                                                         </tbody>

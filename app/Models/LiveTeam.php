@@ -8,12 +8,14 @@ class LiveTeam extends Model
 {
     protected $fillable = [
         'name',
+        'bracket',
         'category_id',
         'player_ids',
         'live_configuration_id',
     ];
 
     protected $casts = [
+        'bracket' => 'integer',
         'player_ids' => 'array',
     ];
 
@@ -38,4 +40,3 @@ class LiveTeam extends Model
         return $this->belongsTo(LiveCategory::class);
     }
 }
-
