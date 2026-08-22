@@ -50,7 +50,7 @@ export default function PlayerImport({ configurations }: Props) {
             const lines = text.split('\n').filter(line => line.trim());
             if (lines.length > 0) {
                 const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1'));
-                const rows = lines.slice(1, 6).map(line =>
+                const rows = lines.slice(1).map(line =>
                     line.split(',').map(cell => cell.trim().replace(/^"(.*)"$/, '$1'))
                 );
                 setPreview({ headers, rows });
@@ -157,8 +157,9 @@ export default function PlayerImport({ configurations }: Props) {
                                 <li><strong>First Name</strong> — Player's first name</li>
                                 <li><strong>Last Name</strong> — Player's last name</li>
                                 <li><strong>Team</strong> — Team name (e.g. "Team A")</li>
-                                <li><strong>Team Number</strong> — Team number (e.g. 1, 2, 3)</li>
+                                <li><strong>Team Number</strong> — Legacy team number column; the Team value identifies the shared team</li>
                                 <li><strong>Category</strong> — Category name (Intermediate, Novice, 45+, etc.)</li>
+                                <li><strong>Bracket</strong> — Optional bracket number for the team</li>
                             </ol>
                             <p className="mt-2">
                                 <strong>Auto-configuration rules:</strong> Intermediate & Novice = 51 points, Game Time 30min, Interval 5min. 45+ = 36 points, Game Time 20min, Interval 5min.
@@ -263,7 +264,7 @@ export default function PlayerImport({ configurations }: Props) {
                                     <div className="mb-2 flex items-center gap-2">
                                         <AlertCircle className="h-4 w-4 text-muted-foreground" />
                                         <span className="text-sm font-medium text-muted-foreground">
-                                            Preview (first {preview.rows.length} rows)
+                                            Preview ({preview.rows.length} rows)
                                         </span>
                                     </div>
                                     <div className="overflow-x-auto rounded-lg border border-border">

@@ -675,8 +675,10 @@ class LiveConfigurationController extends Controller
                 return $right['points_for'] <=> $left['points_for'];
             });
 
-            return [$category->id => collect($teams)->map(function (array $team, int $index): array {
-                $team['rank'] = $index + 1;
+            return [$category->id => collect($teams)->map(function (array $team, int $index) use (&$teams): array {
+                $team['rank'] = collect($teams)->slice(0, $index + 1)
+                    ->where('bracket', $team['bracket'])
+                    ->count();
 
                 return $team;
             })->values()];

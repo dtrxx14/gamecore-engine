@@ -427,7 +427,7 @@ const startPolling = () => {
                                                                         </thead>
                                                                         <tbody>
                                                                             {filteredTeams.map((team, index) => {
-                                                                                const isTop3 = index < 3;
+                                                                                const isTop3 = team.rank <= 3;
                                                                                 const medalClasses = ['text-amber-300', 'text-slate-300', 'text-amber-500'];
                                                                                 const rowClasses = ['bg-red-500/5', 'bg-white/5', 'bg-red-500/10'];
 
@@ -444,12 +444,12 @@ const startPolling = () => {
                                                                                             </tr>
                                                                                         )}
                                                                                         <tr
-                                                                                        className={`border-b border-red-500/5 transition-colors hover:bg-red-500/5 ${isTop3 ? rowClasses[index] : ''}`}
+                                                                                        className={`border-b border-red-500/5 transition-colors hover:bg-red-500/5 ${isTop3 ? rowClasses[team.rank - 1] : ''}`}
                                                                                         >
                                                                                         <td className="py-2.5 pr-2">
                                                                                             {isTop3 ? (
                                                                                                 <span className={`inline-flex items-center justify-center ${medalClasses[index]}`}>
-                                                                                                    {index === 0 ? (
+                                                                                                    {team.rank === 1 ? (
                                                                                                         <Trophy className="h-4 w-4" />
                                                                                                     ) : (
                                                                                                         <Medal className="h-4 w-4" />
@@ -461,7 +461,6 @@ const startPolling = () => {
                                                                                         </td>
                                                                                         <td className="max-w-[180px] truncate px-2 font-medium text-white sm:max-w-[220px]">
                                                                                             {team.team_name}
-                                                                                            {team.bracket !== null && <span className="ml-2 text-[10px] text-red-300">Bracket {team.bracket}</span>}
                                                                                         </td>
                                                                                         <td className="px-2 text-center text-slate-300">{team.matches_played}</td>
                                                                                         <td className="px-2 text-center text-emerald-400">{team.wins}</td>

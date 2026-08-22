@@ -119,6 +119,7 @@ interface Standing {
     id: number;
     live_configuration_id: number;
     category_id: number;
+    rank: number;
     team_id: number;
     bracket: number | null;
     matches_played: number;
@@ -1030,18 +1031,17 @@ if (teamA && teamB && teamA === teamB) {
                                                                     >
                                                                     <td className="px-3 py-2">
                                                                         <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-                                                                            index === 0 ? 'bg-amber-500/15 text-amber-600' :
-                                                                            index === 1 ? 'bg-gray-400/15 text-gray-500' :
-                                                                            index === 2 ? 'bg-orange-500/10 text-orange-600' :
+                                                                            standing.rank === 1 ? 'bg-amber-500/15 text-amber-600' :
+                                                                            standing.rank === 2 ? 'bg-gray-400/15 text-gray-500' :
+                                                                            standing.rank === 3 ? 'bg-orange-500/10 text-orange-600' :
                                                                             'bg-muted text-muted-foreground'
                                                                         }`}>
-                                                                            {index + 1}
+                                                                            {standing.rank}
                                                                         </span>
                                                                     </td>
                                                                     <td className="px-3 py-2">
                                                                         <div className="flex items-center gap-2">
                                                                             <span className="text-sm font-medium text-foreground">{teamName}</span>
-                                                                            {standing.bracket !== null && <span className="ml-2 text-[10px] text-muted-foreground">Bracket {standing.bracket}</span>}
                                                                             {isPlayingNow && (
                                                                                 <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                                                                             )}

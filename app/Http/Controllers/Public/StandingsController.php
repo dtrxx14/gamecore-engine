@@ -246,8 +246,11 @@ class StandingsController extends Controller
                 return $right['points_for'] <=> $left['points_for'];
             });
 
+            $bracketRanks = [];
             foreach ($teams as $index => $team) {
-                $teams[$index]['rank'] = $index + 1;
+                $bracketKey = $team['bracket'] === null ? 'unbracketed' : (string) $team['bracket'];
+                $bracketRanks[$bracketKey] = ($bracketRanks[$bracketKey] ?? 0) + 1;
+                $teams[$index]['rank'] = $bracketRanks[$bracketKey];
             }
 
             $configData['categories'][] = [
