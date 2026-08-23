@@ -81,6 +81,8 @@ interface LiveMatchScore {
     next_team_b_id: number | null;
     umpire_id: number | null;
     status_id: number;
+    end_play_at?: string | null;
+    is_paused?: boolean;
     team_a?: LiveTeam | null;
     team_b?: LiveTeam | null;
     next_team_a?: LiveTeam | null;
@@ -646,6 +648,13 @@ if (teamA && teamB && teamA === teamB) {
         }).join(', ');
     };
 
+    const getPlayerName = (team: LiveTeam | null | undefined, index: number) => {
+        const playerId = team?.player_ids?.[index];
+        const player = players.find((item) => item.id === playerId);
+
+        return player ? `${player.first_name} ${player.last_name}` : `Player ${index + 1}`;
+    };
+
     const getCategoryName = (categoryId: number | null | undefined) => {
         if (!categoryId) return '—';
         const cat = configuration.categories?.find((c) => c.id === categoryId);
@@ -1105,15 +1114,17 @@ if (teamA && teamB && teamA === teamB) {
                                             <td className="px-3 py-3 text-muted-foreground">{game.court_number}</td>
                                             <td className="px-3 py-3 text-muted-foreground">{game.category?.name ?? `Category #${game.category_id}`}</td>
                                             <td className="max-w-[250px] px-3 py-3">
-                                                <div className="font-medium text-foreground">{getPlayerNames(game.team_a)}</div>
-                                                <div className="mt-1 text-[11px] text-muted-foreground">Team: {game.team_a?.name ?? `Team #${game.team_a_id}`}</div>
-                                                <div className="text-[11px] text-muted-foreground">Team ID: {game.team_a_id ?? '—'}</div>
+                                                <div className="font-medium text-foreground">{getPlayerName(game.team_a, 0)}</div>
+                                                <div className="font-medium text-foreground">{getPlayerName(game.team_a, 1)}</div>
+                                                {/* <div className="mt-1 text-[11px] text-muted-foreground">Team: {game.team_a?.name ?? `Team #${game.team_a_id}`}</div>
+                                                <div className="text-[11px] text-muted-foreground">Team ID: {game.team_a_id ?? '—'}</div> */}
                                             </td>
-                                            <td className="px-3 py-3 text-center font-mono text-sm font-bold text-foreground">{game.team_a_score} - {game.team_b_score}</td>
+                                            <td className="px-3 py-3 text-center font-mono text-nowrap text-sm font-bold text-foreground">{game.team_a_score} - {game.team_b_score}</td>
                                             <td className="max-w-[250px] px-3 py-3">
-                                                <div className="font-medium text-foreground">{getPlayerNames(game.team_b)}</div>
-                                                <div className="mt-1 text-[11px] text-muted-foreground">Team: {game.team_b?.name ?? `Team #${game.team_b_id}`}</div>
-                                                <div className="text-[11px] text-muted-foreground">Team ID: {game.team_b_id ?? '—'}</div>
+                                                <div className="font-medium text-foreground">{getPlayerName(game.team_b, 0)}</div>
+                                                <div className="font-medium text-foreground">{getPlayerName(game.team_b, 1)}</div>
+                                                {/* <div className="mt-1 text-[11px] text-muted-foreground">Team: {game.team_b?.name ?? `Team #${game.team_b_id}`}</div>
+                                                <div className="text-[11px] text-muted-foreground">Team ID: {game.team_b_id ?? '—'}</div> */}
                                             </td>
                                             <td className="px-3 py-3 text-muted-foreground">{game.status?.name ?? `Status #${game.status_id}`}</td>
                                             <td className="px-3 py-3 text-right">
@@ -1146,9 +1157,12 @@ if (teamA && teamB && teamA === teamB) {
                         </span>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                         {Array.from({ length: configuration.number_of_courts }, (_, i) => i + 1).map((courtNumber) => {
                             const match = getMatchForCourt(courtNumber);
+                            const isLive = match?.status?.slug === 'playing';
+                            const isFinished = match?.status?.slug === 'completed' || Boolean(match?.end_play_at);
+                            const isSetup = match && !isLive && !isFinished;
                             
                             return (
                                 <div
@@ -1163,12 +1177,29 @@ if (teamA && teamB && teamA === teamB) {
                                             openCourtModal(courtNumber);
                                         }
                                     } : undefined}
-                                    className={`group relative rounded-lg border border-border/60 bg-gradient-to-br from-background to-muted/30 p-4 transition hover:border-red-500/30 hover:shadow-md ${!match ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50' : ''}`}
+                                    className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 ${
+                                        isLive
+                                            ? 'border-primary/30 shadow-lg shadow-primary/10'
+                                            : isFinished
+                                                ? 'border-green-500/20 shadow-md'
+                                                : isSetup
+                                                    ? 'border-amber-500/20 shadow-md'
+                                                    : 'border-muted/30 shadow-sm'
+                                    } ${!match ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50' : ''}`}
                                 >
+                                    <div className={`absolute inset-0 ${
+                                        isLive
+                                            ? 'bg-gradient-to-br from-primary/10 via-background to-primary/5'
+                                            : isFinished
+                                                ? 'bg-gradient-to-br from-green-500/8 via-background to-green-500/3'
+                                                : isSetup
+                                                    ? 'bg-gradient-to-br from-amber-500/8 via-background to-amber-500/3'
+                                                    : 'bg-gradient-to-br from-muted/5 to-background'
+                                    }`} />
                                     {/* Court Header */}
-                                    <div className="mb-3 flex items-center justify-between">
+                                    <div className="relative flex items-center justify-between border-b border-primary/10 px-3 py-2">
                                         <div className="flex items-center gap-2">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-red-500/10 text-base font-bold text-red-600 dark:text-red-400">
+                                            <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${isLive ? 'bg-primary/20 text-primary' : isFinished ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
                                                 {courtNumber}
                                             </div>
                                             <div>
@@ -1192,8 +1223,13 @@ if (teamA && teamB && teamA === teamB) {
                                                 </div>
                                             </div>
                                         </div>
+                                        <div className="flex items-center gap-2">
+                                            {isLive && !match?.is_paused && <span className="flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[9px] font-bold text-green-500"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />LIVE</span>}
+                                            {match?.is_paused && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold text-amber-500">PAUSED</span>}
+                                            {isFinished && <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[9px] font-bold text-green-500">FINISHED</span>}
+                                        </div>
                                         {match ? (
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex items-center gap-1">
                                                 <Button
                                                     type="button"
                                                     variant="ghost"
@@ -1227,7 +1263,7 @@ if (teamA && teamB && teamA === teamB) {
                                     </div>
 
                                     {match && match.umpire && match.umpire_id && (
-                                        <div className="text-[10px] text-muted-foreground truncate">
+                                        <div className="px-6 py-2 text-[10px] text-muted-foreground truncate">
                                             <span>Umpire:</span>
                                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-2 border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-400">
                                                 {match.umpire.first_name} {match.umpire.last_name}
@@ -1237,42 +1273,54 @@ if (teamA && teamB && teamA === teamB) {
 
                                     {/* Match Content */}
                                     {match ? (
-                                        <div className="space-y-3">
+                                        <div className="relative space-y-3 px-3 pb-2">
                                             {/* Team A */}
-                                            <div className="flex items-center justify-between rounded-md bg-background py-1">
+                                            <div className={`relative rounded-xl p-3 transition-all ${match.serving_team === 'team_a' ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-muted/30'}`}>
                                                 <div className="flex items-center gap-2 min-w-0">
-                                                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-[10px] font-bold text-blue-600 dark:text-blue-400">A</div>
-                                                    <span className="truncate text-sm font-medium text-foreground">{getTeamName(match.team_a_id)}</span>
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">A</div>
+                                                    <div className="min-w-0">
+                                                        <span className="block truncate text-sm font-semibold text-foreground">{getPlayerName(match.team_a, 0)}</span>
+                                                        <span className="block truncate text-sm font-semibold text-foreground">{getPlayerName(match.team_a, 1)}</span>
+                                                    </div>
                                                     {renderServingIndicator('team_a', match)}
+                                                    <span className={`ml-auto font-black tabular-nums text-4xl ${isFinished && (match.team_a_score ?? 0) > (match.team_b_score ?? 0) ? 'text-green-500' : 'text-foreground'}`}>{match.team_a_score ?? 0}</span>
                                                 </div>
-                                                <span className="ml-2 text-lg font-bold text-foreground">{match.team_a_score ?? 0}</span>
                                             </div>
 
                                             {/* Serving indicator */}
-                                            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                                                <span className="text-[10px] uppercase tracking-wider">vs</span>
+                                            <div className="flex items-center justify-center gap-3 -my-1">
+                                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+                                                <span className={`text-xs font-bold uppercase tracking-widest ${isFinished ? 'text-green-500/60' : 'text-primary/40'}`}>{isFinished ? 'Final' : 'VS'}</span>
+                                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
                                             </div>
 
                                             {/* Team B */}
-                                            <div className="flex items-center justify-between rounded-md bg-background py-1">
+                                            <div className={`relative rounded-xl p-3 transition-all ${match.serving_team === 'team_b' ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-muted/30'}`}>
                                                 <div className="flex items-center gap-2 min-w-0">
-                                                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-500/10 text-[10px] font-bold text-purple-600 dark:text-purple-400">B</div>
-                                                    <span className="truncate text-sm font-medium text-foreground">{getTeamName(match.team_b_id)}</span>
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">B</div>
+                                                    <div className="min-w-0">
+                                                        <span className="block truncate text-sm font-semibold text-foreground">{getPlayerName(match.team_b, 0)}</span>
+                                                        <span className="block truncate text-sm font-semibold text-foreground">{getPlayerName(match.team_b, 1)}</span>
+                                                    </div>
                                                     {renderServingIndicator('team_b', match)}
+                                                    <span className={`ml-auto font-black tabular-nums text-4xl ${isFinished && (match.team_b_score ?? 0) > (match.team_a_score ?? 0) ? 'text-green-500' : 'text-foreground'}`}>{match.team_b_score ?? 0}</span>
                                                 </div>
-                                                <span className="ml-2 text-lg font-bold text-foreground">{match.team_b_score ?? 0}</span>
                                             </div>
 
                                             {(match.next_team_a_id || match.next_team_b_id) && (
-                                                <div className="text-[10px] text-muted-foreground truncate">
-                                                    <span>Up next</span>
-                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 mx-2">
-                                                        {getTeamName(match.next_team_a_id)}
-                                                    </Badge>
-                                                    vs
-                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-2">
-                                                        {match.next_team_b_id && getTeamName(match.next_team_b_id)}
-                                                    </Badge>
+                                                <div className="rounded-lg border border-dashed border-primary/20 bg-primary/5 p-2">
+                                                    <div className="mb-1 flex items-center gap-1.5 text-[9px] font-medium uppercase tracking-wider text-primary/60">
+                                                        <Users className="h-3 w-3" />
+                                                        <span>Next Match</span>
+                                                        {match.nextCategory && (
+                                                            <span className="text-muted-foreground">· {match.nextCategory.name}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        <span className="font-semibold text-foreground">{match.next_team_a?.name ?? '—'}</span>
+                                                        <span className="text-muted-foreground">vs</span>
+                                                        <span className="font-semibold text-foreground">{match.next_team_b?.name ?? '—'}</span>
+                                                    </div>
                                                 </div>
                                             )}
                                             {match.status && (

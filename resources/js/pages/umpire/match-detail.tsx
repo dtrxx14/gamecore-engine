@@ -148,6 +148,9 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
     const [showPlayerChangeModal, setShowPlayerChangeModal] = useState(false);
     const [showWinnerConfirmation, setShowWinnerConfirmation] = useState(false);
     const [showEndMatchConfirmation, setShowEndMatchConfirmation] = useState(false);
+    const [showTimeExpiredConfirmation, setShowTimeExpiredConfirmation] = useState(false);
+    const [timeExpiryDismissed, setTimeExpiryDismissed] = useState(false);
+    const timeExpiryDismissedRef = useRef(false);
     const [scoringTeam, setScoringTeam] = useState<'team_a' | 'team_b' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -276,19 +279,26 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
         };
     }, [defaultTimerActive, defaultTimerSeconds]);
 
-    // Countdown timer for live match
+    // Countdown timer for live match. Keep one interval alive while the match is playing.
     useEffect(() => {
-        if (livePhase === 'playing' && timeRemaining !== null && timeRemaining > 0 && !isPaused) {
-            countdownRef.current = setInterval(() => {
-                setTimeRemaining((prev) => {
-                    if (prev === null || prev <= 1) {
-                        if (countdownRef.current) clearInterval(countdownRef.current);
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
+        if (livePhase !== 'playing' || isPaused || timeRemaining === null) {
+            return;
         }
+
+        countdownRef.current = setInterval(() => {
+            setTimeRemaining((prev) => {
+                if (prev === null || prev <= 1) {
+                    if (countdownRef.current) {
+                        clearInterval(countdownRef.current);
+                        countdownRef.current = null;
+                    }
+                    setShowTimeExpiredConfirmation(true);
+                    return 0;
+                }
+
+                return prev - 1;
+            });
+        }, 1000);
 
         return () => {
             if (countdownRef.current) {
@@ -296,7 +306,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                 countdownRef.current = null;
             }
         };
-    }, [livePhase, timeRemaining, isPaused]);
+    }, [livePhase, isPaused]);
 
     // Poll for match state updates from backend
     useEffect(() => {
@@ -355,6 +365,9 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                 // Update timer from server-calculated value (persists across sessions)
                 if (data.time_remaining !== null) {
                     setTimeRemaining(data.time_remaining);
+                    if (data.time_remaining <= 0 && livePhase === 'playing' && !timeExpiryDismissedRef.current) {
+                        setShowTimeExpiredConfirmation(true);
+                    }
                 }
 
                 // Check for winner from server - show confirmation, don't auto-finish
@@ -375,7 +388,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
         } catch (error) {
             console.error('Failed to fetch match state:', error);
         }
-    }, [match.id, livePhase, showPlayerChangeModal, showWinnerConfirmation, servingTeam]);
+    }, [match.id, livePhase, showPlayerChangeModal, showWinnerConfirmation, servingTeam, timeExpiryDismissed]);
 
     const formatTime = (seconds: number) => {
         const totalSeconds = Math.max(0, Math.round(seconds));
@@ -471,6 +484,8 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
             if (data.success) {
                 setLivePhase('playing');
                 setIsPaused(false);
+                timeExpiryDismissedRef.current = false;
+                setTimeExpiryDismissed(false);
                 if (match.category?.game_time) {
                     const mins = parseInt(match.category.game_time, 10);
                     if (!isNaN(mins)) { setTotalGameSeconds(mins * 60); setTimeRemaining(mins * 60); }
@@ -711,6 +726,14 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
         setCoinPhase('idle');
     };
 
+    const continueAfterTimeExpired = () => {
+        timeExpiryDismissedRef.current = true;
+        setShowTimeExpiredConfirmation(false);
+        setTimeExpiryDismissed(true);
+        setTimeRemaining(null);
+        setTotalGameSeconds(null);
+    };
+
     // Extract score display IIFE to avoid duplication
     const renderScoreCards = () => {
         const leftTeam = teamACourt === 'left' ? 'team_a' : 'team_b';
@@ -877,12 +900,12 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
 
                                 {/* Timer */}
                                 {timeRemaining !== null && totalGameSeconds !== null ? (
-                                    <div className={`font-mono font-black tracking-tight leading-none ${isCritical ? 'text-destructive animate-pulse' : isLow ? 'text-primary' : (resolvedAppearance === 'dark' ? 'text-white' : 'text-foreground')}`}
-                                        style={{ fontSize: 'clamp(2rem, 8vw, 3.5rem)' }}>
+                                    <div className={`font-mono font-black tracking-tight leading-none ${isLow ? 'text-primary' : (resolvedAppearance === 'dark' ? 'text-white' : 'text-foreground')}`}
+                                        style={{ fontSize: 'clamp(3rem, 10vw, 5rem)' }}>
                                         {formatTime(timeRemaining)}
                                     </div>
                                 ) : (
-                                    <div className={`font-mono font-black tracking-tight leading-none text-3xl ${resolvedAppearance === 'dark' ? 'text-white/30' : 'text-muted-foreground/50'}`}>--:--</div>
+                                    <div className={`font-mono font-black tracking-tight leading-none text-3xl ${resolvedAppearance === 'dark' ? 'text-white/30' : 'text-muted-foreground/50'}`}>No limit</div>
                                 )}
 
                                 {/* Optional progress dot */}
@@ -1391,7 +1414,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                         </div>
                         <h3 className="mt-4 text-xl font-bold text-destructive">End Match?</h3>
                         <p className="mt-2 text-lg font-semibold text-foreground">
-                            {teamAName} {scores.team_a} - {scores.team_b} {teamBName}
+                            {teamAName} <br></br> {scores.team_a} - {scores.team_b} <br></br> {teamBName}
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">This will submit the current match and cannot be undone.</p>
                         <div className="mt-6 flex gap-3">
@@ -1402,6 +1425,32 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                             <button onClick={async () => { setShowEndMatchConfirmation(false); await endMatch(); }} disabled={isSubmitting}
                                 className="flex-1 rounded-xl bg-destructive py-3 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90 active:scale-[0.98] transition-all disabled:opacity-50">
                                 {isSubmitting ? 'Ending...' : 'Yes, end match'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TIME EXPIRED CONFIRMATION MODAL */}
+            {showTimeExpiredConfirmation && livePhase === 'playing' && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm portrait:px-4 landscape:px-8">
+                    <div className="w-full max-w-sm rounded-2xl border border-amber-500/30 bg-gradient-to-br from-card to-amber-500/5 p-6 text-center shadow-2xl">
+                        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/20 shadow-xl">
+                            <Clock className="h-10 w-10 text-amber-500" />
+                        </div>
+                        <h3 className="mt-4 text-xl font-bold text-amber-500">Time Expired</h3>
+                        <p className="mt-2 text-lg font-semibold text-foreground">
+                            {teamAName} <br></br> {scores.team_a} - {scores.team_b} <br></br> {teamBName}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">Continue playing without a time limit, or end and submit this match?</p>
+                        <div className="mt-6 flex gap-3">
+                            <button onClick={continueAfterTimeExpired} disabled={isSubmitting}
+                                className="flex-1 rounded-xl border border-primary/20 bg-background py-3 text-sm font-semibold text-foreground transition-all hover:bg-primary/5 active:scale-[0.98] disabled:opacity-50">
+                                Continue game
+                            </button>
+                            <button onClick={async () => { setShowTimeExpiredConfirmation(false); await endMatch(); }} disabled={isSubmitting}
+                                className="flex-1 rounded-xl bg-destructive py-3 text-sm font-semibold text-destructive-foreground transition-all hover:bg-destructive/90 active:scale-[0.98] disabled:opacity-50">
+                                {isSubmitting ? 'Ending...' : 'End match'}
                             </button>
                         </div>
                     </div>
