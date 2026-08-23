@@ -147,6 +147,7 @@ export default function MatchDetail({ match, phase: initialPhase, time_remaining
     const [winner, setWinner] = useState<string | null>(initialWinner ?? null);
     const [showPlayerChangeModal, setShowPlayerChangeModal] = useState(false);
     const [showWinnerConfirmation, setShowWinnerConfirmation] = useState(false);
+    const [showEndMatchConfirmation, setShowEndMatchConfirmation] = useState(false);
     const [scoringTeam, setScoringTeam] = useState<'team_a' | 'team_b' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -941,7 +942,7 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                                         }`}>
                                         {isPaused ? <><Play className="h-5 w-5" /> Resume</> : <><Pause className="h-5 w-5" /> Pause</>}
                                     </button>
-                                    <button onClick={async () => { await endMatch(); }} disabled={isSubmitting}
+                                    <button onClick={() => setShowEndMatchConfirmation(true)} disabled={isSubmitting}
                                         className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold uppercase tracking-wider transition-all active:scale-[0.97] shadow-lg bg-gradient-to-r from-destructive to-destructive/80 text-destructive-foreground hover:brightness-110 shadow-destructive/30">
                                         <Trophy className="h-5 w-5" /> End
                                     </button>
@@ -1375,6 +1376,32 @@ const teamAName = getTeamName(match.team_a, match.team_a_id);
                             <button onClick={confirmWinner} disabled={isSubmitting}
                                 className="flex-1 rounded-xl bg-gradient-to-r from-primary to-primary/80 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50">
                                 {isSubmitting ? 'Confirming...' : 'Yes, they won!'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* END MATCH CONFIRMATION MODAL */}
+            {showEndMatchConfirmation && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm portrait:px-4 landscape:px-8">
+                    <div className="w-full max-w-sm rounded-2xl border border-destructive/30 bg-gradient-to-br from-card to-destructive/5 p-6 shadow-2xl text-center">
+                        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-destructive/20 shadow-xl">
+                            <Trophy className="h-10 w-10 text-destructive" />
+                        </div>
+                        <h3 className="mt-4 text-xl font-bold text-destructive">End Match?</h3>
+                        <p className="mt-2 text-lg font-semibold text-foreground">
+                            {teamAName} {scores.team_a} - {scores.team_b} {teamBName}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">This will submit the current match and cannot be undone.</p>
+                        <div className="mt-6 flex gap-3">
+                            <button onClick={() => setShowEndMatchConfirmation(false)} disabled={isSubmitting}
+                                className="flex-1 rounded-xl border border-primary/20 bg-background py-3 text-sm font-semibold text-foreground hover:bg-primary/5 active:scale-[0.98] transition-all disabled:opacity-50">
+                                Cancel
+                            </button>
+                            <button onClick={async () => { setShowEndMatchConfirmation(false); await endMatch(); }} disabled={isSubmitting}
+                                className="flex-1 rounded-xl bg-destructive py-3 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90 active:scale-[0.98] transition-all disabled:opacity-50">
+                                {isSubmitting ? 'Ending...' : 'Yes, end match'}
                             </button>
                         </div>
                     </div>
