@@ -172,7 +172,12 @@ it('lists umpires with their live match totals and match details', function () {
         ->assertJsonPath('matches.0.sets', [])
         ->assertJsonCount(10, 'matches');
 
-    expect(collect($matchHistoryResponse->json('matches'))->where('is_sample', true))->toHaveCount(9);
+    $demoMatches = collect($matchHistoryResponse->json('matches'))->where('is_sample', true);
+
+    expect($demoMatches)->toHaveCount(9)
+        ->and($demoMatches->first()['configuration'])->toBe('October Rally Classic')
+        ->and($demoMatches->first()['team_a_players'])->toBe(['Mia Santos'])
+        ->and($demoMatches->first()['status'])->toBe('Completed');
 });
 
 it('does not expose match details for a non-umpire account', function () {
