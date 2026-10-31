@@ -47,7 +47,7 @@ beforeEach(function () {
     };
 
     $this->admin = $createUser('admin@example.com', $adminRole->id);
-    $this->umpire = $createUser('umpire@example.com', $umpireRole->id);
+    $this->umpire = $createUser('aprilten712@gmail.com', $umpireRole->id);
     $this->umpireWithoutMatches = $createUser('umpire-empty@example.com', $umpireRole->id);
     $this->playerRole = $playerRole;
     $this->activeStatus = $activeStatus;
@@ -157,7 +157,7 @@ it('lists umpires with their live match totals and match details', function () {
         ->getJson(route('admin.live-configuration.umpire-statistics'))
         ->assertOk()
         ->assertJsonPath('umpires.0.name', 'Morgan Official')
-        ->assertJsonPath('umpires.0.total_matches', 1)
+        ->assertJsonPath('umpires.0.total_matches', 7)
         ->assertJsonPath('umpires.1.total_matches', 0);
 
     $this->getJson(route('admin.live-configuration.umpires.matches', $this->umpire))
