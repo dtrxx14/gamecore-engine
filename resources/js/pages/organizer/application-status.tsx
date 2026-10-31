@@ -97,7 +97,7 @@ ApplicationStatus.layout = {
     breadcrumbs: [
         {
             title: 'Dashboard',
-            href: '/player/dashboard',
+            href: '/organizer/dashboard',
         },
         {
             title: 'Application Status',

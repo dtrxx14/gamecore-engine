@@ -10,13 +10,13 @@ import {
     Flag,
 } from "lucide-react";
 import type { ChangeEvent, FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge } from "@/components/ui/badge";
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import CategoryForm from '@/pages/organizer/partials/create/CategoryForm';
+import CategoryForm, { type SavedFormatTemplate } from '@/pages/organizer/partials/create/CategoryForm';
 import CategoryList from '@/pages/organizer/partials/create/CategoryList';
 import TournamentSettings from '@/pages/organizer/partials/create/TournamentSettings';
 import VenueForm from '@/pages/organizer/partials/create/VenueForm';
@@ -25,6 +25,9 @@ import { store } from '@/routes/organizer/tournaments';
 
 
 type StepErrorMap = Record<string, string>;
+
+const normalizeScoringFormat = (value?: string): string =>
+    value === 'standard' || value === 'rally-point' ? 'sudden-death' : value ?? 'sudden-death';
 
 type CategoryDraft = {
     id: number;
@@ -45,6 +48,8 @@ type CategoryDraft = {
         point_system: string;
         game_to?: number;
         win_by?: number;
+        game_time?: number | null;
+        tie_break_method?: 'serve' | 'rally';
         pool_count?: number;
         advance_per_pool?: number;
         allow_draw?: boolean;
@@ -59,9 +64,11 @@ export default function CreateTournament({
 
     organization,
     role,
+    formatTemplates = [],
     }: {
         organization: any;
         role: any;
+        formatTemplates?: SavedFormatTemplate[];
     }) {
 
     const { data, setData, post, processing, reset } = useForm({
@@ -92,6 +99,64 @@ export default function CreateTournament({
     const [step, setStep] = useState(1);
     const [stepErrors, setStepErrors] = useState<StepErrorMap>({});
     const [confirmSubmit, setConfirmSubmit] = useState(false);
+    const [draftHydrated, setDraftHydrated] = useState(false);
+
+    const draftStorageKey = `organizer-tournament-draft-${organization.uuid}`;
+
+    useEffect(() => {
+        try {
+            const savedDraft = window.localStorage.getItem(draftStorageKey);
+
+            if (!savedDraft) {
+                return;
+            }
+
+            const draft = JSON.parse(savedDraft) as {
+                data?: Partial<typeof data>;
+                categories?: CategoryDraft[];
+                courts?: string[];
+                step?: number;
+            };
+
+            if (draft.data) {
+                Object.entries(draft.data).forEach(([field, value]) => {
+                    if (field !== 'banner_image' && value !== undefined) {
+                        setData(field as keyof typeof data, value as never);
+                    }
+                });
+            }
+
+            if (draft.categories) {
+                setCategories(draft.categories);
+            }
+
+            if (draft.courts) {
+                setCourts(draft.courts);
+                setData('courts', draft.courts);
+            }
+
+            if (draft.step && draft.step >= 1 && draft.step <= 4) {
+                setStep(draft.step);
+            }
+        } catch {
+            window.localStorage.removeItem(draftStorageKey);
+        } finally {
+            setDraftHydrated(true);
+        }
+    }, [draftStorageKey, setData]);
+
+    useEffect(() => {
+        if (!draftHydrated) {
+            return;
+        }
+
+        const { banner_image: _bannerImage, ...draftData } = data;
+
+        window.localStorage.setItem(
+            draftStorageKey,
+            JSON.stringify({ data: draftData, categories, courts, step }),
+        );
+    }, [categories, courts, data, draftHydrated, draftStorageKey, step]);
 
     const steps = [
         { id: 1, label: 'Tournament Info' },
@@ -253,11 +318,13 @@ export default function CreateTournament({
                     formats: (cat.formats ?? []).map((format) => ({
                         round_format: format.round_format,
                         competition_format: format.competition_format,
-                        scoring_format: format.scoring_format,
+                        scoring_format: normalizeScoringFormat(format.scoring_format),
                         series_format: format.series_format,
                         point_system: format.point_system ?? 'standard-side-out',
                         game_to: format.game_to,
                         win_by: format.win_by,
+                        game_time: format.game_time ?? null,
+                        tie_break_method: format.tie_break_method ?? 'rally',
                         pool_count: format.pool_count,
                         advance_per_pool: format.advance_per_pool,
                         allow_draw: format.allow_draw ?? false,
@@ -279,6 +346,8 @@ export default function CreateTournament({
                 onSuccess: () => {
                     setConfirmSubmit(false);
                     setStepErrors({});
+
+                    window.localStorage.removeItem(draftStorageKey);
 
                     reset();
 
@@ -672,7 +741,17 @@ export default function CreateTournament({
                                 {stepErrors.categories ? <p className="text-sm text-destructive">{stepErrors.categories}</p> : null}
                             </div>
 
-                            <CategoryForm onAdd={addCategory} />
+                            <CategoryForm
+                                onAdd={addCategory}
+                                savedTemplates={formatTemplates}
+                                onSaveTemplate={(name, description, formats) => {
+                                    router.post(
+                                        `/organizer/organizations/${organization.uuid}/format-templates`,
+                                        { name, description, formats },
+                                        { preserveScroll: true },
+                                    );
+                                }}
+                            />
 
                             <div className="rounded-xl border border-border/70 bg-background p-4">
                                 <CategoryList categories={categories} onAdd={addCategory} onRemove={removeCategory} onUpdate={(updatedCat) => {

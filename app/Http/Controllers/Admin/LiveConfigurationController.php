@@ -15,6 +15,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Response;
@@ -33,6 +34,152 @@ class LiveConfigurationController extends Controller
 
         return inertia('admin/live-configuration', [
             'configurations' => $configurations,
+        ]);
+    }
+
+    public function umpireMatchCounts(): JsonResponse
+    {
+        $matchCounts = DB::table('tournament_matches')
+            ->select('official_id')
+            ->selectRaw('COUNT(*) AS total_matches')
+            ->whereNotNull('official_id')
+            ->groupBy('official_id');
+
+        $umpires = User::query()
+            ->join('roles', 'users.role_id', '=', 'roles.id')
+            ->leftJoin('player_information', 'users.id', '=', 'player_information.user_id')
+            ->leftJoinSub($matchCounts, 'match_counts', function ($join): void {
+                $join->on('users.id', '=', 'match_counts.official_id');
+            })
+            ->where('roles.type', 'login')
+            ->where('roles.slug', 'umpire')
+            ->select([
+                'users.id',
+                'users.email',
+                'player_information.first_name',
+                'player_information.last_name',
+                'match_counts.total_matches',
+            ])
+            ->orderByRaw('CASE WHEN player_information.first_name IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('player_information.first_name')
+            ->orderBy('player_information.last_name')
+            ->orderBy('users.id')
+            ->get()
+            ->map(static function ($umpire): array {
+                $name = trim(($umpire->first_name ?? '').' '.($umpire->last_name ?? ''));
+
+                return [
+                    'id' => (int) $umpire->id,
+                    'name' => $name !== '' ? $name : $umpire->email,
+                    'email' => $umpire->email,
+                    'total_matches' => (int) ($umpire->total_matches ?? 0),
+                ];
+            });
+
+        return response()->json(['umpires' => $umpires]);
+    }
+
+    public function umpireMatches(User $umpire): JsonResponse
+    {
+        abort_unless($umpire->role?->slug === 'umpire', 404);
+
+        $matches = DB::table('tournament_matches as matches')
+            ->leftJoin('tournament_categories as categories', 'matches.tournament_category_id', '=', 'categories.id')
+            ->leftJoin('tournaments', 'categories.tournament_id', '=', 'tournaments.id')
+            ->leftJoin('statuses', 'matches.status_id', '=', 'statuses.id')
+            ->where('matches.official_id', $umpire->id)
+            ->select([
+                'matches.id',
+                'matches.team_a_id',
+                'matches.team_b_id',
+                'matches.team_a_score',
+                'matches.team_b_score',
+                'matches.scheduled_at',
+                'matches.started_at',
+                'matches.ended_at',
+                'categories.name as category_name',
+                'tournaments.title as tournament_name',
+                'statuses.name as status_name',
+            ])
+            ->orderByDesc('matches.scheduled_at')
+            ->orderByDesc('matches.id')
+            ->get();
+
+        $teamIds = $matches
+            ->flatMap(static fn ($match): array => [$match->team_a_id, $match->team_b_id])
+            ->filter()
+            ->unique()
+            ->values();
+
+        $playersByTeam = $teamIds->isEmpty()
+            ? collect()
+            : DB::table('tournament_team_members as members')
+                ->leftJoin('player_information', 'members.user_id', '=', 'player_information.user_id')
+                ->whereIn('members.group_id', $teamIds)
+                ->select([
+                    'members.group_id',
+                    'members.user_id',
+                    'player_information.first_name',
+                    'player_information.middle_name',
+                    'player_information.last_name',
+                ])
+                ->orderBy('members.id')
+                ->get()
+                ->groupBy('group_id');
+
+        $scoresByMatch = $matches->isEmpty()
+            ? collect()
+            : DB::table('tournament_live_scores')
+                ->whereIn('tournament_match_id', $matches->pluck('id'))
+                ->orderBy('set_number')
+                ->get()
+                ->groupBy('tournament_match_id');
+
+        return response()->json([
+            'matches' => $matches->map(static function ($match) use ($playersByTeam, $scoresByMatch): array {
+                $teamPlayers = static function ($teamId) use ($playersByTeam): array {
+                    if ($teamId === null) {
+                        return [];
+                    }
+
+                    return ($playersByTeam->get($teamId) ?? collect())
+                        ->map(static function ($player): string {
+                            $name = trim(implode(' ', array_filter([
+                                $player->first_name,
+                                $player->middle_name,
+                                $player->last_name,
+                            ])));
+
+                            return $name !== '' ? $name : 'Player #'.$player->user_id;
+                        })
+                        ->values()
+                        ->all();
+                };
+
+                return [
+                    'id' => (int) $match->id,
+                    'tournament' => $match->tournament_name ?? 'Tournament',
+                    'category' => $match->category_name ?? 'Category',
+                    'status' => $match->status_name,
+                    'scheduled_at' => $match->scheduled_at,
+                    'started_at' => $match->started_at,
+                    'ended_at' => $match->ended_at,
+                    'team_a_players' => $teamPlayers($match->team_a_id),
+                    'team_b_players' => $teamPlayers($match->team_b_id),
+                    'score' => [
+                        'team_a' => (int) $match->team_a_score,
+                        'team_b' => (int) $match->team_b_score,
+                    ],
+                    'sets' => ($scoresByMatch->get($match->id) ?? collect())
+                        ->map(static fn ($set): array => [
+                            'set_number' => (int) $set->set_number,
+                            'team_a_score' => (int) $set->team_a_score,
+                            'team_b_score' => (int) $set->team_b_score,
+                        ])
+                        ->values()
+                        ->all(),
+                ];
+            }),
         ]);
     }
 
@@ -339,7 +486,7 @@ class LiveConfigurationController extends Controller
         $validated = $request->validate([
             'live_configuration_id' => ['required', 'integer', 'exists:live_configurations,id'],
             'name' => ['required', 'string', 'max:255'],
-            'bracket' => ['nullable', 'integer', 'min:1', 'max:999'],
+            'bracket' => ['nullable', 'string', 'max:255'],
             'category_id' => ['nullable', 'integer', 'exists:live_categories,id'],
             'player_ids' => ['nullable', 'array'],
             'player_ids.*' => ['integer', 'exists:users,id'],
@@ -360,7 +507,7 @@ class LiveConfigurationController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'bracket' => ['nullable', 'integer', 'min:1', 'max:999'],
+            'bracket' => ['nullable', 'string', 'max:255'],
             'category_id' => ['nullable', 'integer', 'exists:live_categories,id'],
             'player_ids' => ['nullable', 'array'],
             'player_ids.*' => ['integer', 'exists:users,id'],
@@ -625,26 +772,100 @@ class LiveConfigurationController extends Controller
             }
 
             $teams = array_values($teams);
-            $tripleTieDifferentials = [];
+            $tieBreakers = [];
             foreach (collect($teams)->groupBy(fn (array $team): string => ($team['bracket'] ?? 'none').':'.$team['wins']) as $tieGroup) {
                 if ($tieGroup->count() < 3) {
                     continue;
                 }
 
-                $tiedIds = $tieGroup->pluck('team_id')->all();
+                $tiedIds = $tieGroup->pluck('team_id')->map(fn (int $teamId): int => $teamId)->all();
+                $miniTable = [];
+                $directGames = array_fill_keys($tiedIds, []);
+                foreach ($tiedIds as $tiedId) {
+                    $miniTable[$tiedId] = [
+                        'wins' => 0,
+                        'losses' => 0,
+                        'matches' => 0,
+                        'points_for' => 0,
+                        'points_against' => 0,
+                        'point_differential' => 0,
+                    ];
+                }
+
                 foreach ($matches as $match) {
                     $teamAId = (int) $match->team_a_id;
                     $teamBId = (int) $match->team_b_id;
-                    if (! in_array($teamAId, $tiedIds, true) || ! in_array($teamBId, $tiedIds, true)) {
+                    if (! isset($miniTable[$teamAId], $miniTable[$teamBId]) || $match->team_a_score === null || $match->team_b_score === null) {
                         continue;
                     }
 
-                    $tripleTieDifferentials[$teamAId] = ($tripleTieDifferentials[$teamAId] ?? 0) + $match->team_a_score - $match->team_b_score;
-                    $tripleTieDifferentials[$teamBId] = ($tripleTieDifferentials[$teamBId] ?? 0) + $match->team_b_score - $match->team_a_score;
+                    $miniTable[$teamAId]['matches']++;
+                    $miniTable[$teamBId]['matches']++;
+                    $miniTable[$teamAId]['points_for'] += (int) $match->team_a_score;
+                    $miniTable[$teamAId]['points_against'] += (int) $match->team_b_score;
+                    $miniTable[$teamBId]['points_for'] += (int) $match->team_b_score;
+                    $miniTable[$teamBId]['points_against'] += (int) $match->team_a_score;
+                    $miniTable[$teamAId]['point_differential'] += $match->team_a_score - $match->team_b_score;
+                    $miniTable[$teamBId]['point_differential'] += $match->team_b_score - $match->team_a_score;
+
+                    if ($match->team_a_score > $match->team_b_score) {
+                        $miniTable[$teamAId]['wins']++;
+                        $miniTable[$teamBId]['losses']++;
+                        $teamAResult = 'win';
+                        $teamBResult = 'loss';
+                    } elseif ($match->team_b_score > $match->team_a_score) {
+                        $miniTable[$teamBId]['wins']++;
+                        $miniTable[$teamAId]['losses']++;
+                        $teamAResult = 'loss';
+                        $teamBResult = 'win';
+                    } else {
+                        $teamAResult = 'draw';
+                        $teamBResult = 'draw';
+                    }
+
+                    $directGames[$teamAId][] = [
+                        'opponent_team_id' => $teamBId,
+                        'team_score' => (int) $match->team_a_score,
+                        'opponent_score' => (int) $match->team_b_score,
+                        'result' => $teamAResult,
+                    ];
+                    $directGames[$teamBId][] = [
+                        'opponent_team_id' => $teamAId,
+                        'team_score' => (int) $match->team_b_score,
+                        'opponent_score' => (int) $match->team_a_score,
+                        'result' => $teamBResult,
+                    ];
+                }
+
+                foreach ($tieGroup as $team) {
+                    $teamId = $team['team_id'];
+                    $record = $miniTable[$teamId];
+                    $tiedTeamSummaries = collect($tiedIds)->map(function (int $tiedTeamId) use ($miniTable): array {
+                        $summary = $miniTable[$tiedTeamId];
+
+                        return [
+                            'team_id' => $tiedTeamId,
+                            ...$summary,
+                            'total_games' => $summary['wins'] + $summary['losses'],
+                        ];
+                    })->values()->all();
+                    $tieBreakers[$teamId] = [
+                        'is_triple_tie' => true,
+                        'wins' => $record['wins'],
+                        'losses' => $record['losses'],
+                        'matches' => $record['matches'],
+                        'points_for' => $record['points_for'],
+                        'points_against' => $record['points_against'],
+                        'point_differential' => $record['point_differential'],
+                        'total_games' => $record['wins'] + $record['losses'],
+                        'tied_team_ids' => $tiedIds,
+                        'direct_games' => $directGames[$teamId],
+                        'tied_team_summaries' => $tiedTeamSummaries,
+                    ];
                 }
             }
 
-            usort($teams, function (array $left, array $right) use ($headToHead, $tripleTieDifferentials): int {
+            usort($teams, function (array $left, array $right) use ($headToHead, $tieBreakers): int {
                 if ($left['bracket'] !== $right['bracket']) {
                     if ($left['bracket'] === null) {
                         return 1;
@@ -653,11 +874,23 @@ class LiveConfigurationController extends Controller
                         return -1;
                     }
 
-                    return $left['bracket'] <=> $right['bracket'];
+                    return strcmp((string) $left['bracket'], (string) $right['bracket']);
                 }
 
                 if ($left['wins'] !== $right['wins']) {
                     return $right['wins'] <=> $left['wins'];
+                }
+
+                $leftTieBreaker = $tieBreakers[$left['team_id']] ?? null;
+                $rightTieBreaker = $tieBreakers[$right['team_id']] ?? null;
+                if ($leftTieBreaker && $rightTieBreaker && $leftTieBreaker['wins'] !== $rightTieBreaker['wins']) {
+                    return $rightTieBreaker['wins'] <=> $leftTieBreaker['wins'];
+                }
+
+                $leftDifferential = $leftTieBreaker['point_differential'] ?? $left['point_differential'];
+                $rightDifferential = $rightTieBreaker['point_differential'] ?? $right['point_differential'];
+                if ($leftDifferential !== $rightDifferential) {
+                    return $rightDifferential <=> $leftDifferential;
                 }
 
                 $leftHeadToHeadWins = $headToHead[$left['team_id']][$right['team_id']] ?? 0;
@@ -666,14 +899,14 @@ class LiveConfigurationController extends Controller
                     return $rightHeadToHeadWins <=> $leftHeadToHeadWins;
                 }
 
-                $leftDifferential = $tripleTieDifferentials[$left['team_id']] ?? $left['point_differential'];
-                $rightDifferential = $tripleTieDifferentials[$right['team_id']] ?? $right['point_differential'];
-                if ($leftDifferential !== $rightDifferential) {
-                    return $rightDifferential <=> $leftDifferential;
-                }
-
                 return $right['points_for'] <=> $left['points_for'];
             });
+
+            foreach ($teams as $index => $team) {
+                if (isset($tieBreakers[$team['team_id']])) {
+                    $teams[$index]['tie_breaker'] = $tieBreakers[$team['team_id']];
+                }
+            }
 
             return [$category->id => collect($teams)->map(function (array $team, int $index) use (&$teams): array {
                 $team['rank'] = collect($teams)->slice(0, $index + 1)

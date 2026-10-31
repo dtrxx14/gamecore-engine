@@ -49,6 +49,11 @@ class Organization extends Model
         return $this->hasMany(Tournament::class);
     }
 
+    public function formatTemplates()
+    {
+        return $this->hasMany(TournamentFormatTemplate::class);
+    }
+
     public function status()
     {
         return $this->belongsTo(Status::class)->where('type', 'organization');
@@ -59,4 +64,3 @@ class Organization extends Model
         return $this->status?->slug === 'approved';
     }
 }
-

@@ -45,9 +45,9 @@ class PlayerImport
      * 45+: 36 points, Game Time 20, Game Interval 5
      */
     protected array $categoryConfigs = [
-        'intermediate' => ['game_to' => 51, 'game_time' => '30', 'game_interval' => '5'],
-        'novice' => ['game_to' => 51, 'game_time' => '30', 'game_interval' => '5'],
-        '45+' => ['game_to' => 36, 'game_time' => '20', 'game_interval' => '5'],
+        'intermediate' => ['game_to' => 11, 'game_time' => '15', 'game_interval' => '5'],
+        'novice' => ['game_to' => 11, 'game_time' => '15', 'game_interval' => '5'],
+        '45+' => ['game_to' => 11, 'game_time' => '15', 'game_interval' => '5'],
     ];
 
     /**
@@ -138,7 +138,7 @@ class PlayerImport
         $teamName = trim((string) ($cells[3] ?? ''));
         $categoryName = trim((string) ($cells[5] ?? ''));
         $bracket = trim((string) ($cells[6] ?? ''));
-        $bracketNumber = filter_var($bracket, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+        $bracketName = $bracket !== '' ? $bracket : null;
 
         // Validate required fields
         if (empty($firstName) || empty($lastName)) {
@@ -186,7 +186,7 @@ class PlayerImport
 
             // Process team
             if (! empty($teamName)) {
-                $this->getOrCreateTeam($teamName, $category, $user->id, $bracketNumber);
+                $this->getOrCreateTeam($teamName, $category, $user->id, $bracketName);
             }
         }
     }
@@ -249,7 +249,7 @@ class PlayerImport
     /**
      * Get existing team or create a new one, adding the player to it.
      */
-    protected function getOrCreateTeam(string $teamName, LiveCategory $category, int $userId, ?int $bracket = null): LiveTeam
+    protected function getOrCreateTeam(string $teamName, LiveCategory $category, int $userId, ?string $bracket = null): LiveTeam
     {
         // Look for existing team with same name in this category and configuration
         $team = LiveTeam::whereRaw('LOWER(name) = ?', [strtolower($teamName)])

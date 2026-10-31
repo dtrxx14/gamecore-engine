@@ -75,6 +75,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Live configuration routes
         Route::get('admin/live-configuration', [LiveConfigurationController::class, 'index'])->name('admin.live-configuration.index');
+        Route::get('admin/live-configuration/umpire-statistics', [LiveConfigurationController::class, 'umpireMatchCounts'])->name('admin.live-configuration.umpire-statistics');
+        Route::get('admin/live-configuration/umpires/{umpire}/matches', [LiveConfigurationController::class, 'umpireMatches'])->name('admin.live-configuration.umpires.matches');
         Route::get('admin/live-configuration/create', [LiveConfigurationController::class, 'create'])->name('admin.live-configuration.create');
         Route::post('admin/live-configuration', [LiveConfigurationController::class, 'store'])->name('admin.live-configuration.store');
         Route::get('admin/live-configuration/{liveConfiguration}', [LiveConfigurationController::class, 'show'])->name('admin.live-configuration.show');
@@ -140,6 +142,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('organizer/organizations/{organization}/tournaments/create', [TournamentController::class, 'show'])
             ->name('organizer.organization.tournaments.create');
+        Route::post('organizer/organizations/{organization}/format-templates', [TournamentController::class, 'storeFormatTemplate'])
+            ->name('organizer.organization.format-templates.store');
 
         // Route::inertia('organizer/tournaments/create', 'organizer/create-tournament')->name('organizer.tournaments.create');
         Route::post('organizer/tournaments', [TournamentController::class, 'store'])->name('organizer.tournaments.store');

@@ -16,6 +16,8 @@ class TournamentCategoryFormat extends Model
         'allow_wildcard',
         'game_to',
         'win_by',
+        'game_time',
+        'tie_break_method',
         'pool_count',
         'advance_per_pool',
         'allow_draw',

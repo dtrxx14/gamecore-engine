@@ -15,7 +15,7 @@ class LiveTeam extends Model
     ];
 
     protected $casts = [
-        'bracket' => 'integer',
+        'bracket' => 'string',
         'player_ids' => 'array',
     ];
 

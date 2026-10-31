@@ -968,7 +968,63 @@ class UmpireDashboardController extends Controller
         }
 
         $teams = array_values($teams);
-        usort($teams, function (array $left, array $right): int {
+        $tieBreakers = [];
+        $tieGroups = [];
+        foreach ($teams as $team) {
+            $tieGroups[($team['bracket'] ?? 'none').':'.$team['wins']][] = $team;
+        }
+
+        foreach ($tieGroups as $tieGroup) {
+            if (count($tieGroup) < 3) {
+                continue;
+            }
+
+            $tiedIds = array_column($tieGroup, 'team_id');
+            $miniTable = array_fill_keys($tiedIds, [
+                'wins' => 0,
+                'losses' => 0,
+                'matches' => 0,
+                'points_for' => 0,
+                'points_against' => 0,
+                'point_differential' => 0,
+            ]);
+
+            foreach ($matches as $match) {
+                $teamAId = (int) $match->team_a_id;
+                $teamBId = (int) $match->team_b_id;
+                if (! isset($miniTable[$teamAId], $miniTable[$teamBId]) || $match->team_a_score === null || $match->team_b_score === null) {
+                    continue;
+                }
+
+                $miniTable[$teamAId]['matches']++;
+                $miniTable[$teamBId]['matches']++;
+                $miniTable[$teamAId]['points_for'] += (int) $match->team_a_score;
+                $miniTable[$teamAId]['points_against'] += (int) $match->team_b_score;
+                $miniTable[$teamBId]['points_for'] += (int) $match->team_b_score;
+                $miniTable[$teamBId]['points_against'] += (int) $match->team_a_score;
+                $miniTable[$teamAId]['point_differential'] += $match->team_a_score - $match->team_b_score;
+                $miniTable[$teamBId]['point_differential'] += $match->team_b_score - $match->team_a_score;
+
+                if ($match->team_a_score > $match->team_b_score) {
+                    $miniTable[$teamAId]['wins']++;
+                    $miniTable[$teamBId]['losses']++;
+                } elseif ($match->team_b_score > $match->team_a_score) {
+                    $miniTable[$teamBId]['wins']++;
+                    $miniTable[$teamAId]['losses']++;
+                }
+            }
+
+            foreach ($miniTable as $teamId => $record) {
+                $tieBreakers[$teamId] = [
+                    'is_triple_tie' => true,
+                    ...$record,
+                    'total_games' => $record['wins'] + $record['losses'],
+                    'tied_team_ids' => $tiedIds,
+                ];
+            }
+        }
+
+        usort($teams, function (array $left, array $right) use ($tieBreakers): int {
             if ($left['bracket'] !== $right['bracket']) {
                 if ($left['bracket'] === null) {
                     return 1;
@@ -977,15 +1033,23 @@ class UmpireDashboardController extends Controller
                     return -1;
                 }
 
-                return $left['bracket'] <=> $right['bracket'];
+                return strcmp((string) $left['bracket'], (string) $right['bracket']);
             }
 
             if ($left['wins'] !== $right['wins']) {
                 return $right['wins'] <=> $left['wins'];
             }
 
-            if ($left['point_differential'] !== $right['point_differential']) {
-                return $right['point_differential'] <=> $left['point_differential'];
+            $leftTieBreaker = $tieBreakers[$left['team_id']] ?? null;
+            $rightTieBreaker = $tieBreakers[$right['team_id']] ?? null;
+            if ($leftTieBreaker && $rightTieBreaker && $leftTieBreaker['wins'] !== $rightTieBreaker['wins']) {
+                return $rightTieBreaker['wins'] <=> $leftTieBreaker['wins'];
+            }
+
+            $leftDifferential = $leftTieBreaker['point_differential'] ?? $left['point_differential'];
+            $rightDifferential = $rightTieBreaker['point_differential'] ?? $right['point_differential'];
+            if ($leftDifferential !== $rightDifferential) {
+                return $rightDifferential <=> $leftDifferential;
             }
 
             return $right['points_for'] <=> $left['points_for'];
@@ -993,6 +1057,9 @@ class UmpireDashboardController extends Controller
 
         $bracketRanks = [];
         foreach ($teams as $index => $team) {
+            if (isset($tieBreakers[$team['team_id']])) {
+                $teams[$index]['tie_breaker'] = $tieBreakers[$team['team_id']];
+            }
             $bracketKey = $team['bracket'] === null ? 'unbracketed' : (string) $team['bracket'];
             $bracketRanks[$bracketKey] = ($bracketRanks[$bracketKey] ?? 0) + 1;
             $teams[$index]['rank'] = $bracketRanks[$bracketKey];

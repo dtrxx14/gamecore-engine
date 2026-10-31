@@ -159,10 +159,10 @@ export default function PlayerImport({ configurations }: Props) {
                                 <li><strong>Team</strong> — Team name (e.g. "Team A")</li>
                                 <li><strong>Team Number</strong> — Legacy team number column; the Team value identifies the shared team</li>
                                 <li><strong>Category</strong> — Category name (Intermediate, Novice, 45+, etc.)</li>
-                                <li><strong>Bracket</strong> — Optional bracket number for the team</li>
+                                <li><strong>Bracket</strong> — Optional bracket name for the team</li>
                             </ol>
                             <p className="mt-2">
-                                <strong>Auto-configuration rules:</strong> Intermediate & Novice = 51 points, Game Time 30min, Interval 5min. 45+ = 36 points, Game Time 20min, Interval 5min.
+                                <strong>Auto-configuration rules:</strong> Intermediate & Novice = 11 points, Game Time 15min, Interval 5min. 45+ = 11 points, Game Time 15min, Interval 5min.
                             </p>
                         </div>
                     </CardContent>

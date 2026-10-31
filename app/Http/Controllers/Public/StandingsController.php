@@ -196,26 +196,68 @@ class StandingsController extends Controller
             }
 
             $teams = array_values($teamsById);
-            $tripleTieDifferentials = [];
+            $tieBreakers = [];
             foreach (collect($teams)->groupBy(fn (array $team): string => ($team['bracket'] ?? 'none').':'.$team['wins']) as $tieGroup) {
                 if ($tieGroup->count() < 3) {
                     continue;
                 }
 
-                $tiedIds = $tieGroup->pluck('team_id')->all();
+                $tiedIds = $tieGroup->pluck('team_id')->map(fn (int $teamId): int => $teamId)->all();
+                $miniTable = [];
+                foreach ($tiedIds as $tiedId) {
+                    $miniTable[$tiedId] = [
+                        'wins' => 0,
+                        'losses' => 0,
+                        'matches' => 0,
+                        'points_for' => 0,
+                        'points_against' => 0,
+                        'point_differential' => 0,
+                    ];
+                }
+
                 foreach ($matches as $match) {
                     $teamAId = (int) $match->team_a_id;
                     $teamBId = (int) $match->team_b_id;
-                    if (! in_array($teamAId, $tiedIds, true) || ! in_array($teamBId, $tiedIds, true)) {
+                    if (! isset($miniTable[$teamAId], $miniTable[$teamBId]) || $match->team_a_score === null || $match->team_b_score === null) {
                         continue;
                     }
 
-                    $tripleTieDifferentials[$teamAId] = ($tripleTieDifferentials[$teamAId] ?? 0) + $match->team_a_score - $match->team_b_score;
-                    $tripleTieDifferentials[$teamBId] = ($tripleTieDifferentials[$teamBId] ?? 0) + $match->team_b_score - $match->team_a_score;
+                    $miniTable[$teamAId]['matches']++;
+                    $miniTable[$teamBId]['matches']++;
+                    $miniTable[$teamAId]['points_for'] += (int) $match->team_a_score;
+                    $miniTable[$teamAId]['points_against'] += (int) $match->team_b_score;
+                    $miniTable[$teamBId]['points_for'] += (int) $match->team_b_score;
+                    $miniTable[$teamBId]['points_against'] += (int) $match->team_a_score;
+                    $miniTable[$teamAId]['point_differential'] += $match->team_a_score - $match->team_b_score;
+                    $miniTable[$teamBId]['point_differential'] += $match->team_b_score - $match->team_a_score;
+
+                    if ($match->team_a_score > $match->team_b_score) {
+                        $miniTable[$teamAId]['wins']++;
+                        $miniTable[$teamBId]['losses']++;
+                    } elseif ($match->team_b_score > $match->team_a_score) {
+                        $miniTable[$teamBId]['wins']++;
+                        $miniTable[$teamAId]['losses']++;
+                    }
+                }
+
+                foreach ($tieGroup as $team) {
+                    $teamId = $team['team_id'];
+                    $record = $miniTable[$teamId];
+                    $tieBreakers[$teamId] = [
+                        'is_triple_tie' => true,
+                        'wins' => $record['wins'],
+                        'losses' => $record['losses'],
+                        'matches' => $record['matches'],
+                        'points_for' => $record['points_for'],
+                        'points_against' => $record['points_against'],
+                        'point_differential' => $record['point_differential'],
+                        'total_games' => $record['wins'] + $record['losses'],
+                        'tied_team_ids' => $tiedIds,
+                    ];
                 }
             }
 
-            usort($teams, function (array $left, array $right) use ($headToHead, $tripleTieDifferentials): int {
+            usort($teams, function (array $left, array $right) use ($headToHead, $tieBreakers): int {
                 if ($left['bracket'] !== $right['bracket']) {
                     if ($left['bracket'] === null) {
                         return 1;
@@ -224,11 +266,23 @@ class StandingsController extends Controller
                         return -1;
                     }
 
-                    return $left['bracket'] <=> $right['bracket'];
+                    return strcmp((string) $left['bracket'], (string) $right['bracket']);
                 }
 
                 if ($left['wins'] !== $right['wins']) {
                     return $right['wins'] <=> $left['wins'];
+                }
+
+                $leftTieBreaker = $tieBreakers[$left['team_id']] ?? null;
+                $rightTieBreaker = $tieBreakers[$right['team_id']] ?? null;
+                if ($leftTieBreaker && $rightTieBreaker && $leftTieBreaker['wins'] !== $rightTieBreaker['wins']) {
+                    return $rightTieBreaker['wins'] <=> $leftTieBreaker['wins'];
+                }
+
+                $leftDifferential = $leftTieBreaker['point_differential'] ?? $left['point_differential'];
+                $rightDifferential = $rightTieBreaker['point_differential'] ?? $right['point_differential'];
+                if ($leftDifferential !== $rightDifferential) {
+                    return $rightDifferential <=> $leftDifferential;
                 }
 
                 $leftHeadToHeadWins = $headToHead[$left['team_id']][$right['team_id']] ?? 0;
@@ -237,14 +291,14 @@ class StandingsController extends Controller
                     return $rightHeadToHeadWins <=> $leftHeadToHeadWins;
                 }
 
-                $leftDifferential = $tripleTieDifferentials[$left['team_id']] ?? $left['point_differential'];
-                $rightDifferential = $tripleTieDifferentials[$right['team_id']] ?? $right['point_differential'];
-                if ($leftDifferential !== $rightDifferential) {
-                    return $rightDifferential <=> $leftDifferential;
-                }
-
                 return $right['points_for'] <=> $left['points_for'];
             });
+
+            foreach ($teams as $index => $team) {
+                if (isset($tieBreakers[$team['team_id']])) {
+                    $teams[$index]['tie_breaker'] = $tieBreakers[$team['team_id']];
+                }
+            }
 
             $bracketRanks = [];
             foreach ($teams as $index => $team) {

@@ -223,13 +223,12 @@ export default function OrganizerApprovals({ organizations }: Props) {
 
                                         {/* Banner image */}
                                         {org.banner_image ? (
-                                            <div className="relative h-28 w-full overflow-hidden">
+                                            <div className="relative h-28 w-full overflow-hidden bg-muted">
                                                 <img
                                                     src={`/storage/${org.banner_image}`}
                                                     alt=""
-                                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                                    className="h-full w-full object-contain"
                                                 />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent" />
                                             </div>
                                         ) : (
                                             <div className="flex h-28 w-full items-center justify-center bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/20">
@@ -377,11 +376,11 @@ export default function OrganizerApprovals({ organizations }: Props) {
                                     <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
                                         {/* Banner */}
                                         {selectedOrg.banner_image ? (
-                                            <div className="relative h-40 w-full overflow-hidden bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/20">
+                                            <div className="relative h-40 w-full overflow-hidden bg-muted">
                                                 <img
                                                     src={`/storage/${selectedOrg.banner_image}`}
                                                     alt="Organization banner"
-                                                    className="h-full w-full object-cover"
+                                                    className="h-full w-full object-contain"
                                                 />
                                             </div>
                                         ) : (
@@ -516,7 +515,7 @@ export default function OrganizerApprovals({ organizations }: Props) {
                                     {/* Action buttons */}
                                     <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4">
                                         <Button
-                                            variant="outline"
+                                            variant="ghost"
                                             className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
                                             onClick={() => {
                                                 setDetailsModal(false);

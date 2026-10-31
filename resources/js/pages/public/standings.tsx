@@ -1,7 +1,20 @@
 import { Head } from '@inertiajs/react';
 import { Fragment, useEffect, useState, useRef } from 'react';
 import AppLogoIcon from '@/components/app-logo-icon';
-import { Trophy, TrendingUp, TrendingDown, Minus, Medal, Swords, Clock, ChevronDown, ChevronRight, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import {
+    Trophy,
+    TrendingUp,
+    TrendingDown,
+    Minus,
+    Medal,
+    Swords,
+    Clock,
+    ChevronDown,
+    ChevronRight,
+    RefreshCw,
+    Wifi,
+    WifiOff,
+} from 'lucide-react';
 
 interface StandingTeam {
     live_configuration_id?: number;
@@ -9,7 +22,7 @@ interface StandingTeam {
     rank: number;
     team_id: number;
     team_name: string;
-    bracket: number | null;
+    bracket: string | null;
     court_number: number;
     matches_played: number;
     wins: number;
@@ -56,26 +69,49 @@ interface StandingsPageProps {
     standingsData?: StandingsConfiguration | null;
 }
 
-export default function Standings({ configurations, standingsByConfig: initialData, configuration: singleConfig, standingsData: singleData }: StandingsPageProps) {
+export default function Standings({
+    configurations,
+    standingsByConfig: initialData,
+    configuration: singleConfig,
+    standingsData: singleData,
+}: StandingsPageProps) {
     // Single-config (slug) mode: use the passed configuration/standingsData directly.
     const isSingleMode = !!singleConfig && !!singleData;
     const effectiveConfigs = isSingleMode
-        ? [{ id: singleConfig.id, name: singleConfig.name, scoring_system: singleConfig.scoring_system, pusher_channel: singleConfig.pusher_channel }]
+        ? [
+              {
+                  id: singleConfig.id,
+                  name: singleConfig.name,
+                  scoring_system: singleConfig.scoring_system,
+                  pusher_channel: singleConfig.pusher_channel,
+              },
+          ]
         : (configurations ?? []);
-    const [standingsByConfig, setStandingsByConfig] = useState<StandingsConfiguration[]>(isSingleMode ? [singleData!] : (initialData ?? []));
+    const [standingsByConfig, setStandingsByConfig] = useState<
+        StandingsConfiguration[]
+    >(isSingleMode ? [singleData!] : (initialData ?? []));
     const slug = singleConfig?.slug;
-    const [expandedConfigs, setExpandedConfigs] = useState<Record<number, boolean>>({});
-    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+    const [expandedConfigs, setExpandedConfigs] = useState<
+        Record<number, boolean>
+    >({});
+    const [expandedCategories, setExpandedCategories] = useState<
+        Record<string, boolean>
+    >({});
+    const [categorySearch, setCategorySearch] = useState<
+        Record<string, string>
+    >({});
     const [isPolling, setIsPolling] = useState(false);
     const [connected, setConnected] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
     const echoRef = useRef<any>(null);
-    const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+        null,
+    );
     const [searchQuery, setSearchQuery] = useState('');
 
     // Toggle configuration expand
     const toggleConfig = (configId: number) => {
-        setExpandedConfigs(prev => ({
+        setExpandedConfigs((prev) => ({
             ...prev,
             [configId]: !prev[configId],
         }));
@@ -83,25 +119,55 @@ export default function Standings({ configurations, standingsByConfig: initialDa
 
     // Toggle category expand
     const toggleCategory = (key: string) => {
-        setExpandedCategories(prev => ({
+        setExpandedCategories((prev) => ({
             ...prev,
             [key]: !prev[key],
         }));
     };
 
-    // Expanded all by default
+    // Restore accordion state without resetting it when live data refreshes.
     useEffect(() => {
         const configMap: Record<number, boolean> = {};
         const catMap: Record<string, boolean> = {};
-        standingsByConfig.forEach(config => {
-            configMap[config.configuration_id] = true;
-            config.categories.forEach(cat => {
-                catMap[`${config.configuration_id}-${cat.category_id}`] = true;
+        let saved: {
+            configs?: Record<number, boolean>;
+            categories?: Record<string, boolean>;
+        } = {};
+
+        try {
+            saved = JSON.parse(
+                window.localStorage.getItem(
+                    'public-live-standings-accordions',
+                ) ?? '{}',
+            );
+        } catch {
+            window.localStorage.removeItem('public-live-standings-accordions');
+        }
+
+        standingsByConfig.forEach((config) => {
+            configMap[config.configuration_id] =
+                saved.configs?.[config.configuration_id] ??
+                expandedConfigs[config.configuration_id] ??
+                true;
+            config.categories.forEach((cat) => {
+                const key = `${config.configuration_id}-${cat.category_id}`;
+                catMap[key] =
+                    saved.categories?.[key] ?? expandedCategories[key] ?? true;
             });
         });
         setExpandedConfigs(configMap);
         setExpandedCategories(catMap);
     }, [standingsByConfig]);
+
+    useEffect(() => {
+        window.localStorage.setItem(
+            'public-live-standings-accordions',
+            JSON.stringify({
+                configs: expandedConfigs,
+                categories: expandedCategories,
+            }),
+        );
+    }, [expandedCategories, expandedConfigs]);
 
     // Auto-scroll to config from hash
     useEffect(() => {
@@ -109,7 +175,8 @@ export default function Standings({ configurations, standingsByConfig: initialDa
             const id = window.location.hash.replace('#', '');
             setTimeout(() => {
                 const el = document.getElementById(id);
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (el)
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 300);
         }
     }, [standingsByConfig]);
@@ -124,14 +191,19 @@ export default function Standings({ configurations, standingsByConfig: initialDa
                 const echo = echoModule.default;
                 echoRef.current = echo;
 
-// Subscribe to each active configuration
-                effectiveConfigs.forEach(config => {
+                // Subscribe to each active configuration
+                effectiveConfigs.forEach((config) => {
                     const channelName = `standings.${config.id}`;
-                    console.log(`[Standings] Subscribing to channel: ${channelName}`);
+                    console.log(
+                        `[Standings] Subscribing to channel: ${channelName}`,
+                    );
 
                     const channel = echo.channel(channelName);
                     channel.listen('.standings.updated', (event: any) => {
-                        console.log(`[Standings] Received update for config ${config.id}:`, event);
+                        console.log(
+                            `[Standings] Received update for config ${config.id}:`,
+                            event,
+                        );
                         if (isSubscribed) {
                             handleStandingsUpdate(config.id, event);
                         }
@@ -140,7 +212,10 @@ export default function Standings({ configurations, standingsByConfig: initialDa
 
                 setConnected(true);
             } catch (err) {
-                console.warn('[Standings] Failed to initialize Echo, falling back to polling:', err);
+                console.warn(
+                    '[Standings] Failed to initialize Echo, falling back to polling:',
+                    err,
+                );
                 setConnected(false);
                 startPolling();
             }
@@ -148,10 +223,10 @@ export default function Standings({ configurations, standingsByConfig: initialDa
 
         initEcho();
 
-return () => {
+        return () => {
             isSubscribed = false;
             if (echoRef.current) {
-                effectiveConfigs.forEach(config => {
+                effectiveConfigs.forEach((config) => {
                     try {
                         echoRef.current.leave(`standings.${config.id}`);
                     } catch (e) {
@@ -166,14 +241,18 @@ return () => {
     }, [configurations, effectiveConfigs]);
 
     const handleStandingsUpdate = (configId: number, event: any) => {
-        const updatedCategories: StandingsCategory[] = Array.isArray(event?.standings)
+        const updatedCategories: StandingsCategory[] = Array.isArray(
+            event?.standings,
+        )
             ? event.standings
             : Array.isArray(event?.data)
-                ? event.data
-                : [];
+              ? event.data
+              : [];
 
-        setStandingsByConfig(prev => {
-            const configExists = prev.some(config => config.configuration_id === configId);
+        setStandingsByConfig((prev) => {
+            const configExists = prev.some(
+                (config) => config.configuration_id === configId,
+            );
 
             if (!configExists && updatedCategories.length > 0) {
                 return [
@@ -188,30 +267,42 @@ return () => {
                 ];
             }
 
-            return prev.map(config => {
+            return prev.map((config) => {
                 if (config.configuration_id !== configId) return config;
 
                 const updatedByCategory = new Map<number, StandingsCategory>();
                 updatedCategories.forEach((category: StandingsCategory) => {
-                    updatedByCategory.set(Number(category.category_id), category);
+                    updatedByCategory.set(
+                        Number(category.category_id),
+                        category,
+                    );
                 });
 
                 return {
                     ...config,
-                    categories: (config.categories ?? []).map(existingCat => {
-                        const updatedCat = updatedByCategory.get(existingCat.category_id);
+                    categories: (config.categories ?? []).map((existingCat) => {
+                        const updatedCat = updatedByCategory.get(
+                            existingCat.category_id,
+                        );
                         if (!updatedCat) {
                             return existingCat;
                         }
 
                         return {
                             ...existingCat,
-                            category_name: updatedCat.category_name ?? existingCat.category_name,
+                            category_name:
+                                updatedCat.category_name ??
+                                existingCat.category_name,
                             game_to: updatedCat.game_to ?? existingCat.game_to,
                             win_by: updatedCat.win_by ?? existingCat.win_by,
-                            game_time: updatedCat.game_time ?? existingCat.game_time,
-                            game_interval: updatedCat.game_interval ?? existingCat.game_interval,
-                            teams: Array.isArray(updatedCat.teams) ? updatedCat.teams : existingCat.teams,
+                            game_time:
+                                updatedCat.game_time ?? existingCat.game_time,
+                            game_interval:
+                                updatedCat.game_interval ??
+                                existingCat.game_interval,
+                            teams: Array.isArray(updatedCat.teams)
+                                ? updatedCat.teams
+                                : existingCat.teams,
                         };
                     }),
                 };
@@ -221,7 +312,7 @@ return () => {
         setLastUpdated(new Date());
     };
 
-const startPolling = () => {
+    const startPolling = () => {
         if (pollingIntervalRef.current) return;
         setIsPolling(true);
 
@@ -247,7 +338,9 @@ const startPolling = () => {
 
     // Format time ago
     const timeAgo = (date: Date) => {
-        const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+        const seconds = Math.floor(
+            (new Date().getTime() - date.getTime()) / 1000,
+        );
         if (seconds < 10) return 'just now';
         if (seconds < 60) return `${seconds}s ago`;
         const minutes = Math.floor(seconds / 60);
@@ -259,7 +352,7 @@ const startPolling = () => {
     const filterTeams = (teams: StandingTeam[]) => {
         if (!searchQuery.trim()) return teams;
         const q = searchQuery.toLowerCase();
-        return teams.filter(team => team.team_name.toLowerCase().includes(q));
+        return teams.filter((team) => team.team_name.toLowerCase().includes(q));
     };
 
     if (!standingsByConfig || standingsByConfig.length === 0) {
@@ -269,8 +362,13 @@ const startPolling = () => {
                 <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-slate-900">
                     <div className="text-center">
                         <Trophy className="mx-auto mb-4 h-16 w-16 text-amber-400/50" />
-                        <h1 className="mb-2 text-2xl font-bold text-white">No Active Standings</h1>
-                        <p className="text-gray-400">There are no active live configurations with standings available.</p>
+                        <h1 className="mb-2 text-2xl font-bold text-white">
+                            No Active Standings
+                        </h1>
+                        <p className="text-gray-400">
+                            There are no active live configurations with
+                            standings available.
+                        </p>
                     </div>
                 </div>
             </>
@@ -289,18 +387,22 @@ const startPolling = () => {
                                 <AppLogoIcon className="h-6 w-6" />
                             </div>
                             <div>
-                                <h1 className="text-lg font-semibold text-white sm:text-xl">Live Standings</h1>
-                                <p className="text-[10px] uppercase tracking-[0.2em] text-red-300/80">GameCore</p>
+                                <h1 className="text-lg font-semibold text-white sm:text-xl">
+                                    Live Standings
+                                </h1>
+                                <p className="text-[10px] tracking-[0.2em] text-red-300/80 uppercase">
+                                    GameCore
+                                </p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
                             {connected ? (
-                                <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-emerald-300">
+                                <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium tracking-[0.2em] text-emerald-300 uppercase">
                                     <Wifi className="h-3.5 w-3.5" />
                                     Live
                                 </span>
                             ) : (
-                                <span className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-amber-300">
+                                <span className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-medium tracking-[0.2em] text-amber-300 uppercase">
                                     <WifiOff className="h-3.5 w-3.5" />
                                     Polling
                                 </span>
@@ -312,23 +414,27 @@ const startPolling = () => {
                     </div>
 
                     <div className="border-t border-red-500/10 px-4 py-3 sm:px-6 lg:px-8">
-                        <div className="flex justify-center mx-auto max-w-6xl">
+                        <div className="mx-auto flex max-w-6xl justify-center">
                             <input
                                 type="text"
                                 placeholder="Search teams..."
                                 value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                className="h-16 text-xl w-7xl px-4 rounded-xl border border-red-500/20 bg-white/5 text-white placeholder-slate-400 outline-none transition-all focus:border-red-400/60 focus:bg-white/10"
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="h-16 w-7xl rounded-xl border border-red-500/20 bg-white/5 px-4 text-xl text-white placeholder-slate-400 transition-all outline-none focus:border-red-400/60 focus:bg-white/10"
                             />
                         </div>
                     </div>
                 </div>
 
-                <div className="mx-auto max-w-7xl px-4 pb-12 pt-6 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl px-4 pt-6 pb-12 sm:px-6 lg:px-8">
                     <div className="space-y-6">
-                        {standingsByConfig.map(config => {
-                            const isConfigExpanded = expandedConfigs[config.configuration_id] ?? true;
-                            const categoriesWithTeams = (config.categories ?? []).filter(category => category.teams?.length > 0);
+                        {standingsByConfig.map((config) => {
+                            const isConfigExpanded =
+                                expandedConfigs[config.configuration_id] ??
+                                true;
+                            const categoriesWithTeams = (
+                                config.categories ?? []
+                            ).filter((category) => category.teams?.length > 0);
 
                             if (categoriesWithTeams.length === 0) {
                                 return null;
@@ -341,7 +447,11 @@ const startPolling = () => {
                                     className="overflow-hidden rounded-2xl border border-red-500/10 bg-slate-900/70 shadow-[0_18px_45px_rgba(15,23,42,0.45)] backdrop-blur-sm"
                                 >
                                     <button
-                                        onClick={() => toggleConfig(config.configuration_id)}
+                                        onClick={() =>
+                                            toggleConfig(
+                                                config.configuration_id,
+                                            )
+                                        }
                                         className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-red-500/5"
                                     >
                                         <div className="flex items-center gap-3">
@@ -353,8 +463,11 @@ const startPolling = () => {
                                                     {config.configuration_name}
                                                 </h2>
                                                 <div className="mt-1 flex items-center gap-2">
-                                                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-red-300">
-                                                        {config.scoring_system === 'rally-point' ? 'Rally Point' : 'Side Out'}
+                                                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-[0.18em] text-red-300 uppercase">
+                                                        {config.scoring_system ===
+                                                        'rally-point'
+                                                            ? 'Rally Point'
+                                                            : 'Side Out'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -368,138 +481,319 @@ const startPolling = () => {
 
                                     {isConfigExpanded && (
                                         <div className="border-t border-red-500/10 bg-slate-950/30">
-                                            {categoriesWithTeams.map(category => {
-                                                const catKey = `${config.configuration_id}-${category.category_id}`;
-                                                const isCatExpanded = expandedCategories[catKey] ?? true;
-                                                const filteredTeams = filterTeams(category.teams);
+                                            {categoriesWithTeams.map(
+                                                (category) => {
+                                                    const catKey = `${config.configuration_id}-${category.category_id}`;
+                                                    const isCatExpanded =
+                                                        expandedCategories[
+                                                            catKey
+                                                        ] ?? true;
+                                                    const categoryQuery =
+                                                        categorySearch[
+                                                            catKey
+                                                        ] ?? '';
+                                                    const filteredTeams =
+                                                        filterTeams(
+                                                            category.teams,
+                                                        ).filter((team) =>
+                                                            team.team_name
+                                                                .toLowerCase()
+                                                                .includes(
+                                                                    categoryQuery.toLowerCase(),
+                                                                ),
+                                                        );
 
-                                                return (
-                                                    <div key={category.category_id} className="border-b border-red-500/10 last:border-b-0">
-                                                        <button
-                                                            onClick={() => toggleCategory(catKey)}
-                                                            className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-red-500/5"
+                                                    return (
+                                                        <div
+                                                            key={
+                                                                category.category_id
+                                                            }
+                                                            className="border-b border-red-500/10 last:border-b-0"
                                                         >
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-300">
-                                                                    <Swords className="h-4 w-4" />
-                                                                </div>
-                                                                <div>
-                                                                    <h3 className="text-sm font-semibold text-slate-100">{category.category_name}</h3>
-                                                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                                                                        <span>First to {category.game_to}</span>
-                                                                        <span>Win by {category.win_by}</span>
-                                                                        {category.game_time && <span>{category.game_time} min game</span>}
-                                                                        {category.game_interval && <span>{category.game_interval} interval</span>}
+                                                            <button
+                                                                onClick={() =>
+                                                                    toggleCategory(
+                                                                        catKey,
+                                                                    )
+                                                                }
+                                                                className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-red-500/5"
+                                                            >
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-300">
+                                                                        <Swords className="h-4 w-4" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <h3 className="text-sm font-semibold text-slate-100">
+                                                                            {
+                                                                                category.category_name
+                                                                            }
+                                                                        </h3>
+                                                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] tracking-[0.14em] text-slate-400 uppercase">
+                                                                            <span>
+                                                                                First
+                                                                                to{' '}
+                                                                                {
+                                                                                    category.game_to
+                                                                                }
+                                                                            </span>
+                                                                            <span>
+                                                                                Win
+                                                                                by{' '}
+                                                                                {
+                                                                                    category.win_by
+                                                                                }
+                                                                            </span>
+                                                                            {category.game_time && (
+                                                                                <span>
+                                                                                    {
+                                                                                        category.game_time
+                                                                                    }{' '}
+                                                                                    min
+                                                                                    game
+                                                                                </span>
+                                                                            )}
+                                                                            {category.game_interval && (
+                                                                                <span>
+                                                                                    {
+                                                                                        category.game_interval
+                                                                                    }{' '}
+                                                                                    interval
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-xs text-slate-400">
-                                                                    {filteredTeams.length} team{filteredTeams.length !== 1 ? 's' : ''}
-                                                                </span>
-                                                                {isCatExpanded ? (
-                                                                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                                                                ) : (
-                                                                    <ChevronRight className="h-4 w-4 text-slate-400" />
-                                                                )}
-                                                            </div>
-                                                        </button>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs text-slate-400">
+                                                                        {
+                                                                            filteredTeams.length
+                                                                        }{' '}
+                                                                        team
+                                                                        {filteredTeams.length !==
+                                                                        1
+                                                                            ? 's'
+                                                                            : ''}
+                                                                    </span>
+                                                                    {isCatExpanded ? (
+                                                                        <ChevronDown className="h-4 w-4 text-slate-400" />
+                                                                    ) : (
+                                                                        <ChevronRight className="h-4 w-4 text-slate-400" />
+                                                                    )}
+                                                                </div>
+                                                            </button>
 
-                                                        {isCatExpanded && (
-                                                            <div className="overflow-x-auto px-5 pb-4">
-                                                                {filteredTeams.length === 0 ? (
-                                                                    <p className="py-8 text-center text-sm text-slate-400">
-                                                                        {searchQuery ? 'No teams match your search.' : 'No teams in this category yet.'}
-                                                                    </p>
-                                                                ) : (
-                                                                    <table className="w-full text-left text-sm">
-                                                                        <thead>
-                                                                            <tr className="border-b border-red-500/10 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                                                                                <th className="py-2 pr-2 font-medium">#</th>
-                                                                                <th className="py-2 px-2 font-medium">Team</th>
-                                                                                <th className="py-2 px-2 text-center font-medium">MP</th>
-                                                                                <th className="py-2 px-2 text-center font-medium">W</th>
-                                                                                <th className="py-2 px-2 text-center font-medium">L</th>
-                                                                                <th className="py-2 px-2 text-center font-medium">PF</th>
-                                                                                <th className="py-2 px-2 text-center font-medium">PA</th>
-                                                                                <th className="py-2 px-2 text-center font-medium">PD</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            {filteredTeams.map((team, index) => {
-                                                                                const isTop3 = team.rank <= 3;
-                                                                                const medalClasses = ['text-amber-300', 'text-slate-300', 'text-amber-500'];
-                                                                                const rowClasses = ['bg-red-500/5', 'bg-white/5', 'bg-red-500/10'];
+                                                            {isCatExpanded && (
+                                                                <div className="overflow-x-auto px-5 pb-4">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={
+                                                                            categoryQuery
+                                                                        }
+                                                                        onChange={(
+                                                                            event,
+                                                                        ) =>
+                                                                            setCategorySearch(
+                                                                                (
+                                                                                    prev,
+                                                                                ) => ({
+                                                                                    ...prev,
+                                                                                    [catKey]:
+                                                                                        event
+                                                                                            .target
+                                                                                            .value,
+                                                                                }),
+                                                                            )
+                                                                        }
+                                                                        placeholder="Search teams in this category..."
+                                                                        aria-label={`Search teams in ${category.category_name}`}
+                                                                        className="mb-3 h-9 w-full rounded-md border border-red-500/20 bg-white/5 px-3 text-sm text-white placeholder-slate-400 transition outline-none focus:border-red-400/60 focus:bg-white/10"
+                                                                    />
+                                                                    {filteredTeams.length ===
+                                                                    0 ? (
+                                                                        <p className="py-8 text-center text-sm text-slate-400">
+                                                                            {searchQuery
+                                                                                ? 'No teams match your search.'
+                                                                                : 'No teams in this category yet.'}
+                                                                        </p>
+                                                                    ) : (
+                                                                        <table className="w-full text-left text-sm">
+                                                                            <thead>
+                                                                                <tr className="border-b border-red-500/10 text-[10px] tracking-[0.2em] text-slate-400 uppercase">
+                                                                                    <th className="py-2 pr-2 font-medium">
+                                                                                        #
+                                                                                    </th>
+                                                                                    <th className="px-2 py-2 font-medium">
+                                                                                        Team
+                                                                                    </th>
+                                                                                    <th className="px-2 py-2 text-center font-medium">
+                                                                                        MP
+                                                                                    </th>
+                                                                                    <th className="px-2 py-2 text-center font-medium">
+                                                                                        W
+                                                                                    </th>
+                                                                                    <th className="px-2 py-2 text-center font-medium">
+                                                                                        L
+                                                                                    </th>
+                                                                                    <th className="px-2 py-2 text-center font-medium">
+                                                                                        PF
+                                                                                    </th>
+                                                                                    <th className="px-2 py-2 text-center font-medium">
+                                                                                        PA
+                                                                                    </th>
+                                                                                    <th className="px-2 py-2 text-center font-medium">
+                                                                                        PD
+                                                                                    </th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {filteredTeams.map(
+                                                                                    (
+                                                                                        team,
+                                                                                        index,
+                                                                                    ) => {
+                                                                                        const isTop3 =
+                                                                                            team.rank <=
+                                                                                            3;
+                                                                                        const medalClasses =
+                                                                                            [
+                                                                                                'text-amber-300',
+                                                                                                'text-slate-300',
+                                                                                                'text-amber-500',
+                                                                                            ];
+                                                                                        const rowClasses =
+                                                                                            [
+                                                                                                'bg-red-500/5',
+                                                                                                'bg-white/5',
+                                                                                                'bg-red-500/10',
+                                                                                            ];
 
-                                                                                const previousTeam = filteredTeams[index - 1];
-                                                                                const startsBracket = index === 0 || team.bracket !== previousTeam?.bracket;
+                                                                                        const previousTeam =
+                                                                                            filteredTeams[
+                                                                                                index -
+                                                                                                    1
+                                                                                            ];
+                                                                                        const startsBracket =
+                                                                                            index ===
+                                                                                                0 ||
+                                                                                            team.bracket !==
+                                                                                                previousTeam?.bracket;
 
-                                                                                return (
-                                                                                    <Fragment key={`${team.live_configuration_id}-${team.category_id}-${team.team_id}`}>
-                                                                                        {startsBracket && (
-                                                                                            <tr className="border-b border-red-500/10 bg-red-500/5">
-                                                                                                <td colSpan={8} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-red-300">
-                                                                                                    {team.bracket === null ? 'Unbracketed teams' : `Bracket ${team.bracket}`}
-                                                                                                </td>
-                                                                                            </tr>
-                                                                                        )}
-                                                                                        <tr
-                                                                                        className={`border-b border-red-500/5 transition-colors hover:bg-red-500/5 ${isTop3 ? rowClasses[team.rank - 1] : ''}`}
-                                                                                        >
-                                                                                        <td className="py-2.5 pr-2">
-                                                                                            {isTop3 ? (
-                                                                                                <span className={`inline-flex items-center justify-center ${medalClasses[index]}`}>
-                                                                                                    {team.rank === 1 ? (
-                                                                                                        <Trophy className="h-4 w-4" />
-                                                                                                    ) : (
-                                                                                                        <Medal className="h-4 w-4" />
-                                                                                                    )}
-                                                                                                </span>
-                                                                                            ) : (
-                                                                                                <span className="text-slate-500">{team.rank}</span>
-                                                                                            )}
-                                                                                        </td>
-                                                                                        <td className="max-w-[180px] truncate px-2 font-medium text-white sm:max-w-[220px]">
-                                                                                            {team.team_name}
-                                                                                        </td>
-                                                                                        <td className="px-2 text-center text-slate-300">{team.matches_played}</td>
-                                                                                        <td className="px-2 text-center text-emerald-400">{team.wins}</td>
-                                                                                        <td className="px-2 text-center text-red-400">{team.losses}</td>
-                                                                                        <td className="px-2 text-center text-slate-200">{team.points_for}</td>
-                                                                                        <td className="px-2 text-center text-slate-200">{team.points_against}</td>
-                                                                                        <td className="px-2 text-center">
-                                                                                            <span
-                                                                                                className={`inline-flex items-center gap-0.5 ${
-                                                                                                    team.point_differential > 0
-                                                                                                        ? 'text-emerald-400'
-                                                                                                        : team.point_differential < 0
-                                                                                                          ? 'text-red-400'
-                                                                                                          : 'text-slate-400'
-                                                                                                }`}
+                                                                                        return (
+                                                                                            <Fragment
+                                                                                                key={`${team.live_configuration_id}-${team.category_id}-${team.team_id}`}
                                                                                             >
-                                                                                                {team.point_differential > 0 ? (
-                                                                                                    <TrendingUp className="h-3 w-3" />
-                                                                                                ) : team.point_differential < 0 ? (
-                                                                                                    <TrendingDown className="h-3 w-3" />
-                                                                                                ) : (
-                                                                                                    <Minus className="h-3 w-3" />
+                                                                                                {startsBracket && (
+                                                                                                    <tr className="border-b border-red-500/10 bg-red-500/5">
+                                                                                                        <td
+                                                                                                            colSpan={
+                                                                                                                8
+                                                                                                            }
+                                                                                                            className="px-2 py-2 text-[10px] font-semibold tracking-[0.18em] text-red-300 uppercase"
+                                                                                                        >
+                                                                                                            {team.bracket ===
+                                                                                                            null
+                                                                                                                ? 'Unbracketed teams'
+                                                                                                                : `Bracket ${team.bracket}`}
+                                                                                                        </td>
+                                                                                                    </tr>
                                                                                                 )}
-                                                                                                {team.point_differential > 0 ? '+' : ''}
-                                                                                                {team.point_differential}
-                                                                                            </span>
-                                                                                        </td>
-                                                                                        </tr>
-                                                                                    </Fragment>
-                                                                                );
-                                                                            })}
-                                                                        </tbody>
-                                                                    </table>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+                                                                                                <tr
+                                                                                                    className={`border-b border-red-500/5 transition-colors hover:bg-red-500/5 ${isTop3 ? rowClasses[team.rank - 1] : ''}`}
+                                                                                                >
+                                                                                                    <td className="py-2.5 pr-2">
+                                                                                                        {isTop3 ? (
+                                                                                                            <span
+                                                                                                                className={`inline-flex items-center justify-center ${medalClasses[index]}`}
+                                                                                                            >
+                                                                                                                {team.rank ===
+                                                                                                                1 ? (
+                                                                                                                    <Trophy className="h-4 w-4" />
+                                                                                                                ) : (
+                                                                                                                    <Medal className="h-4 w-4" />
+                                                                                                                )}
+                                                                                                            </span>
+                                                                                                        ) : (
+                                                                                                            <span className="text-slate-500">
+                                                                                                                {
+                                                                                                                    team.rank
+                                                                                                                }
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </td>
+                                                                                                    <td className="max-w-[180px] truncate px-2 font-medium text-white sm:max-w-[220px]">
+                                                                                                        {
+                                                                                                            team.team_name
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                    <td className="px-2 text-center text-slate-300">
+                                                                                                        {
+                                                                                                            team.matches_played
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                    <td className="px-2 text-center text-emerald-400">
+                                                                                                        {
+                                                                                                            team.wins
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                    <td className="px-2 text-center text-red-400">
+                                                                                                        {
+                                                                                                            team.losses
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                    <td className="px-2 text-center text-slate-200">
+                                                                                                        {
+                                                                                                            team.points_for
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                    <td className="px-2 text-center text-slate-200">
+                                                                                                        {
+                                                                                                            team.points_against
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                    <td className="px-2 text-center">
+                                                                                                        <span
+                                                                                                            className={`inline-flex items-center gap-0.5 ${
+                                                                                                                team.point_differential >
+                                                                                                                0
+                                                                                                                    ? 'text-emerald-400'
+                                                                                                                    : team.point_differential <
+                                                                                                                        0
+                                                                                                                      ? 'text-red-400'
+                                                                                                                      : 'text-slate-400'
+                                                                                                            }`}
+                                                                                                        >
+                                                                                                            {team.point_differential >
+                                                                                                            0 ? (
+                                                                                                                <TrendingUp className="h-3 w-3" />
+                                                                                                            ) : team.point_differential <
+                                                                                                              0 ? (
+                                                                                                                <TrendingDown className="h-3 w-3" />
+                                                                                                            ) : (
+                                                                                                                <Minus className="h-3 w-3" />
+                                                                                                            )}
+                                                                                                            {team.point_differential >
+                                                                                                            0
+                                                                                                                ? '+'
+                                                                                                                : ''}
+                                                                                                            {
+                                                                                                                team.point_differential
+                                                                                                            }
+                                                                                                        </span>
+                                                                                                    </td>
+                                                                                                </tr>
+                                                                                            </Fragment>
+                                                                                        );
+                                                                                    },
+                                                                                )}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                },
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -508,7 +802,10 @@ const startPolling = () => {
                     </div>
 
                     <div className="mt-8 flex items-center justify-between border-t border-red-500/10 pt-4 text-xs text-slate-500">
-                        <span className="flex items-center gap-2"><AppLogoIcon className="h-4 w-4" />GameCore Live Standings</span>
+                        <span className="flex items-center gap-2">
+                            <AppLogoIcon className="h-4 w-4" />
+                            GameCore Live Standings
+                        </span>
                         <div className="flex items-center gap-2">
                             {isPolling && (
                                 <RefreshCw className="h-3 w-3 animate-spin text-red-300" />

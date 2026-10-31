@@ -87,12 +87,14 @@ it('allows an approved organizer to create a tournament with venue, settings, co
                     'team_type' => 'singles',
                     'formats' => [
                         [
-                            'round_format' => 'single-elimination',
+                            'round_format' => 'round-16',
                             'competition_format' => 'round-robin',
                             'scoring_format' => 'standard',
                             'series_format' => 'best-of-3',
                             'game_to' => 11,
                             'win_by' => 2,
+                            'game_time' => 15,
+                            'tie_break_method' => 'serve',
                             'pool_count' => 4,
                             'advance_per_pool' => 1,
                             'allow_draw' => false,
@@ -100,8 +102,8 @@ it('allows an approved organizer to create a tournament with venue, settings, co
                         [
                             'round_format' => 'quarter-finals',
                             'competition_format' => 'single-elimination',
-                            'scoring_format' => 'standard',
-                            'series_format' => 'best-of-1',
+                            'scoring_format' => 'sudden-death',
+                            'series_format' => 'none',
                             'game_to' => 11,
                             'win_by' => 2,
                             'pool_count' => 0,
@@ -123,7 +125,10 @@ it('allows an approved organizer to create a tournament with venue, settings, co
     expect($tournament->settings->courts()->count())->toBe(2);
     expect($tournament->categories()->count())->toBe(1);
     expect($tournament->categories()->first()->formats()->count())->toBe(2);
-    expect($tournament->categories()->first()->formats()->first()->round_format)->toBe('single-elimination');
+    expect($tournament->categories()->first()->formats()->first()->round_format)->toBe('round-16');
+    expect($tournament->categories()->first()->formats()->first()->scoring_format)->toBe('sudden-death');
+    expect($tournament->categories()->first()->formats()->first()->game_time)->toBe(15);
+    expect($tournament->categories()->first()->formats()->first()->tie_break_method)->toBe('serve');
 });
 
 it('renders a bracket preview page for a tournament category using the saved elimination format', function () {

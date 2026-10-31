@@ -187,11 +187,13 @@ class PlayerManagementController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $playerInformation->user()->forceFill([
+        $user = $playerInformation->user;
+
+        $user->forceFill([
             'password' => Hash::make($request->string('password')->value()),
         ])->save();
 
-        event(new PasswordReset($playerInformation->user()));
+        event(new PasswordReset($user));
 
         return back()->with('success', 'Player password has been reset successfully');
     }

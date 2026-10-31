@@ -21,8 +21,20 @@ const roundFormatLabels: Record<string, string> = {
     'round-8': 'R8',
     'quarter-finals': 'QF',
     'semi-finals': 'SF',
-    'battle-for-third': '3rd',
+    'battle-for-third': 'BF-3rd',
     'finals': 'Finals',
+};
+
+type CategoryFormatSummary = {
+    round_format?: string;
+    game_to?: number | string;
+    win_by?: number | string;
+    game_time?: number | string | null;
+    tie_break_method?: 'serve' | 'rally';
+    pool_count?: number | string;
+    allow_court_change?: boolean;
+    court_change_trigger?: string;
+    court_change_interval?: number | null;
 };
 
 export default function CategoryList({
@@ -109,7 +121,7 @@ export default function CategoryList({
                         return (
                             <div
                                 key={c.id}
-                                className="group relative flex items-start gap-4 rounded-xl border border-border/60 bg-card p-4 transition-all hover:border-border hover:shadow-sm"
+                                className="group relative flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-3 transition-all hover:border-border hover:shadow-sm sm:p-4 md:flex-row md:items-start md:gap-4"
                             >
                                 {/* Category Icon */}
                                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -128,7 +140,7 @@ export default function CategoryList({
                                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                                 {/* Team Type Badge */}
                                                 <Badge variant="secondary" className="text-[10px] font-medium">
-                                                    {c.team_type}
+                                                    {c.team_type} event
                                                 </Badge>
 
                                                 {/* Format Count Badge */}
@@ -138,18 +150,69 @@ export default function CategoryList({
                                                 </Badge>
 
                                                 {/* Competition Format Badge */}
-                                                {firstFormat?.competition_format && (
+                                                {/* {firstFormat?.competition_format && (
                                                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${competitionFormatColors[firstFormat.competition_format] ?? 'bg-gray-100 text-gray-700'}`}>
                                                         {firstFormat.competition_format}
                                                     </span>
-                                                )}
+                                                )} */}
 
                                                 {/* Round Format Badge */}
-                                                {firstFormat?.round_format && (
+                                                {/* {firstFormat?.round_format && (
                                                     <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                                                         {roundFormatLabels[firstFormat.round_format] ?? firstFormat.round_format}
                                                     </span>
-                                                )}
+                                                )} */}
+                                            </div>
+
+                                            {/* Description (if available) */}
+                                            {c.description && (
+                                                <p className="mt-1.5 line-clamp-1 text-xs text-muted-foreground/60">
+                                                    {c.description}
+                                                </p>
+                                            )}
+
+                                            <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs text-muted-foreground sm:grid-cols-3 lg:grid-cols-7">
+                                                {Array.isArray(c.formats) && c.formats.map((format: CategoryFormatSummary, index: number) => {
+                                                    const roundName = roundFormatLabels[format.round_format ?? ''] ?? format.round_format ?? `Format ${index + 1}`;
+                                                    const courtRule = format.allow_court_change
+                                                        ? format.court_change_trigger && format.court_change_trigger !== 'none'
+                                                            ? `${format.court_change_trigger.replaceAll('_', ' ')}${format.court_change_interval ? ` (${format.court_change_interval})` : ''}`
+                                                            : 'enabled'
+                                                        : 'disabled';
+
+                                                    return (
+                                                        <div key={index} className="col-span-2 grid min-w-0 grid-cols-2 gap-1.5 rounded-md bg-muted/40 p-1.5 sm:col-span-3 sm:grid-cols-3 lg:col-span-7 lg:grid-cols-7">
+                                                            <div className="min-w-0 rounded-sm bg-background/70 px-2 py-1.5">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Round</div>
+                                                                <div className="truncate font-medium text-foreground">{roundName}</div>
+                                                            </div>
+                                                            <div className="min-w-0 rounded-sm bg-background/70 px-2 py-1.5">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Game to</div>
+                                                                <div className="font-medium text-foreground">{format.game_to ?? '—'}</div>
+                                                            </div>
+                                                            <div className="min-w-0 rounded-sm bg-background/70 px-2 py-1.5">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Win by</div>
+                                                                <div className="font-medium text-foreground">{format.win_by ?? '—'}</div>
+                                                            </div>
+                                                            <div className="min-w-0 rounded-sm bg-background/70 px-2 py-1.5">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Pools</div>
+                                                                <div className="font-medium text-foreground">{format.pool_count ?? '—'}</div>
+                                                            </div>
+                                                            <div className="min-w-0 rounded-sm bg-background/70 px-2 py-1.5">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Time</div>
+                                                                <div className="font-medium text-foreground">{format.game_time ? `${format.game_time} min` : 'None'}</div>
+                                                            </div>
+                                                            <div className="min-w-0 rounded-sm bg-background/70 px-2 py-1.5">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Tie rule</div>
+                                                                <div className="font-medium capitalize text-foreground">{format.tie_break_method ?? 'rally'}</div>
+                                                            </div>
+                                                            <div className="min-w-0 rounded-sm bg-background/70 px-2 py-1.5">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">Court change</div>
+                                                                <div className="truncate font-medium capitalize text-foreground">{courtRule}</div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
 
@@ -169,17 +232,10 @@ export default function CategoryList({
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Description (if available) */}
-                                    {c.description && (
-                                        <p className="mt-1.5 line-clamp-1 text-xs text-muted-foreground/60">
-                                            {c.description}
-                                        </p>
-                                    )}
                                 </div>
 
-{/* Actions - visible on hover */}
-                                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                {/* Actions - visible on hover */}
+                                <div className="hidden shrink-0 items-center gap-1 lg:flex">
                                     {onAdd && (
                                         <Button
                                             type="button"
@@ -202,7 +258,7 @@ export default function CategoryList({
                                     >
                                         <Pencil className="h-3.5 w-3.5" />
                                     </Button>
-<Button
+                                    <Button
                                         type="button"
                                         variant="ghost"
                                         size="icon"
@@ -215,7 +271,7 @@ export default function CategoryList({
                                 </div>
 
                                 {/* Always-visible mobile actions */}
-                                <div className="flex shrink-0 items-center gap-1 sm:hidden">
+                                <div className="flex shrink-0 items-center gap-1 lg:hidden">
                                     {onAdd && (
                                         <Button
                                             type="button"
@@ -254,7 +310,7 @@ export default function CategoryList({
             )}
 
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="max-h-[85vh] overflow-auto">
+                <DialogContent className="h-[92vh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto p-3 sm:h-[90vh] sm:w-[calc(100%-2rem)] sm:p-6">
                     <DialogHeader>
                         <DialogTitle>Edit category</DialogTitle>
                         <DialogDescription>Update the category details and format steps.</DialogDescription>
@@ -279,7 +335,7 @@ export default function CategoryList({
                         }}
                     />
                 </DialogContent>
-</Dialog>
+            </Dialog>
 
             {/* Delete Confirmation Dialog */}
             <Dialog open={confirmingDeleteId !== null} onOpenChange={(open) => { if (!open) setConfirmingDeleteId(null); }}>

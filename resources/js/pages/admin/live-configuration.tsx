@@ -1,10 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
     Activity,
+    ArrowLeft,
     ArrowRight,
+    ClipboardList,
     Clock,
     Eye,
     GripVertical,
+    LoaderCircle,
     Monitor,
     Pencil,
     Plus,
@@ -13,7 +16,7 @@ import {
     Trash2,
     ScanEye,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -56,6 +59,34 @@ interface LiveConfigurationData {
     created_at: string;
 }
 
+interface UmpireSummary {
+    id: number;
+    name: string;
+    email: string;
+    total_matches: number;
+}
+
+interface UmpireMatch {
+    id: number;
+    tournament: string;
+    category: string;
+    status: string | null;
+    scheduled_at: string | null;
+    started_at: string | null;
+    ended_at: string | null;
+    team_a_players: string[];
+    team_b_players: string[];
+    score: {
+        team_a: number;
+        team_b: number;
+    };
+    sets: {
+        set_number: number;
+        team_a_score: number;
+        team_b_score: number;
+    }[];
+}
+
 interface Props {
     configurations: LiveConfigurationData[];
 }
@@ -63,10 +94,94 @@ interface Props {
 export default function LiveConfiguration({ configurations }: Props) {
     const [deleteTarget, setDeleteTarget] = useState<LiveConfigurationData | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [umpireDialogOpen, setUmpireDialogOpen] = useState(false);
+    const [umpires, setUmpires] = useState<UmpireSummary[]>([]);
+    const [selectedUmpire, setSelectedUmpire] = useState<UmpireSummary | null>(null);
+    const [umpireMatches, setUmpireMatches] = useState<UmpireMatch[]>([]);
+    const [isLoadingUmpires, setIsLoadingUmpires] = useState(false);
+    const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+    const [umpireError, setUmpireError] = useState<string | null>(null);
+    const [matchesError, setMatchesError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!umpireDialogOpen) {
+            return;
+        }
+
+        const controller = new AbortController();
+        setIsLoadingUmpires(true);
+        setUmpireError(null);
+
+        fetch('/admin/live-configuration/umpire-statistics', {
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        })
+            .then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('Unable to load umpire statistics.');
+                }
+
+                const data: { umpires: UmpireSummary[] } = await response.json();
+                setUmpires(data.umpires);
+            })
+            .catch((error: unknown) => {
+                if (!controller.signal.aborted) {
+                    setUmpireError(error instanceof Error ? error.message : 'Unable to load umpire statistics.');
+                }
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setIsLoadingUmpires(false);
+                }
+            });
+
+        return () => controller.abort();
+    }, [umpireDialogOpen]);
+
+    useEffect(() => {
+        if (!umpireDialogOpen || !selectedUmpire) {
+            return;
+        }
+
+        const controller = new AbortController();
+        setIsLoadingMatches(true);
+        setMatchesError(null);
+
+        fetch(`/admin/live-configuration/umpires/${selectedUmpire.id}/matches`, {
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        })
+            .then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('Unable to load this umpire’s matches.');
+                }
+
+                const data: { matches: UmpireMatch[] } = await response.json();
+                setUmpireMatches(data.matches);
+            })
+            .catch((error: unknown) => {
+                if (!controller.signal.aborted) {
+                    setMatchesError(error instanceof Error ? error.message : 'Unable to load this umpire’s matches.');
+                }
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setIsLoadingMatches(false);
+                }
+            });
+
+        return () => controller.abort();
+    }, [umpireDialogOpen, selectedUmpire]);
 
     const confirmDelete = (config: LiveConfigurationData) => {
         setDeleteTarget(config);
         setDeleteOpen(true);
+    };
+
+    const openUmpireDialog = () => {
+        setSelectedUmpire(null);
+        setUmpireMatches([]);
+        setUmpireDialogOpen(true);
     };
 
     const executeDelete = () => {
@@ -226,6 +341,21 @@ export default function LiveConfiguration({ configurations }: Props) {
                                                 </Tooltip>
                                             </Link>
 
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                        onClick={openUmpireDialog}
+                                                    >
+                                                        <ClipboardList className="h-4 w-4" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Umpire match history</TooltipContent>
+                                            </Tooltip>
+
                                             <Link href={`/admin/live-configuration/${config.id}/edit`}>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
@@ -287,6 +417,164 @@ export default function LiveConfiguration({ configurations }: Props) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <Dialog
+                open={umpireDialogOpen}
+                onOpenChange={(open) => {
+                    setUmpireDialogOpen(open);
+                    if (!open) {
+                        setSelectedUmpire(null);
+                    }
+                }}
+            >
+                <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+                    <DialogHeader>
+                        {selectedUmpire && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="mb-2 w-fit"
+                                onClick={() => {
+                                    setSelectedUmpire(null);
+                                    setUmpireMatches([]);
+                                }}
+                            >
+                                <ArrowLeft className="mr-2 size-4" />
+                                All umpires
+                            </Button>
+                        )}
+                        <DialogTitle>
+                            {selectedUmpire ? `${selectedUmpire.name}’s tournament matches` : 'Umpire match history'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {selectedUmpire
+                                ? `${selectedUmpire.total_matches} tournament ${selectedUmpire.total_matches === 1 ? 'match' : 'matches'} umpired.`
+                                : 'Select an umpire to view the matches they have officiated.'}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {!selectedUmpire && (
+                        <div className="overflow-x-auto rounded-md border">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">Umpire</th>
+                                        <th className="px-4 py-3 font-medium">Email</th>
+                                        <th className="px-4 py-3 text-right font-medium">Matches umpired</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {isLoadingUmpires ? (
+                                        <tr>
+                                            <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
+                                                <LoaderCircle className="mr-2 inline size-4 animate-spin" />
+                                                Loading umpires…
+                                            </td>
+                                        </tr>
+                                    ) : umpireError ? (
+                                        <tr>
+                                            <td colSpan={3} className="px-4 py-10 text-center text-destructive">
+                                                {umpireError}
+                                            </td>
+                                        </tr>
+                                    ) : umpires.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
+                                                No umpires found.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        umpires.map((umpire) => (
+                                            <tr key={umpire.id} className="transition-colors hover:bg-muted/40">
+                                                <td className="px-4 py-3">
+                                                    <Button
+                                                        type="button"
+                                                        variant="link"
+                                                        className="h-auto p-0 font-medium"
+                                                        onClick={() => setSelectedUmpire(umpire)}
+                                                    >
+                                                        {umpire.name}
+                                                    </Button>
+                                                </td>
+                                                <td className="px-4 py-3 text-muted-foreground">{umpire.email}</td>
+                                                <td className="px-4 py-3 text-right font-semibold">{umpire.total_matches}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {selectedUmpire && (
+                        <div className="overflow-x-auto rounded-md border">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">Tournament / category</th>
+                                        <th className="px-4 py-3 font-medium">Players</th>
+                                        <th className="px-4 py-3 text-center font-medium">Score</th>
+                                        <th className="px-4 py-3 font-medium">Date</th>
+                                        <th className="px-4 py-3 font-medium">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {isLoadingMatches ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                                                <LoaderCircle className="mr-2 inline size-4 animate-spin" />
+                                                Loading matches…
+                                            </td>
+                                        </tr>
+                                    ) : matchesError ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-4 py-10 text-center text-destructive">
+                                                {matchesError}
+                                            </td>
+                                        </tr>
+                                    ) : umpireMatches.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                                                No tournament matches found for this umpire.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        umpireMatches.map((match) => (
+                                            <tr key={match.id}>
+                                                <td className="px-4 py-3">
+                                                    <div className="font-medium">{match.tournament}</div>
+                                                    <div className="text-xs text-muted-foreground">{match.category}</div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div>{match.team_a_players.join(' / ') || 'Team A'}</div>
+                                                    <div className="text-muted-foreground">{match.team_b_players.join(' / ') || 'Team B'}</div>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <div className="font-semibold tabular-nums">
+                                                        {match.score.team_a} – {match.score.team_b}
+                                                    </div>
+                                                    {match.sets.length > 0 && (
+                                                        <div className="mt-1 text-xs text-muted-foreground">
+                                                            {match.sets
+                                                                .map((set) => `${set.team_a_score}-${set.team_b_score}`)
+                                                                .join(', ')}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                                                    {match.scheduled_at ? new Date(match.scheduled_at).toLocaleString() : '—'}
+                                                </td>
+                                                <td className="px-4 py-3 text-muted-foreground">{match.status ?? '—'}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
@@ -303,4 +591,3 @@ LiveConfiguration.layout = {
         },
     ],
 };
-

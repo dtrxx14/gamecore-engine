@@ -1,5 +1,7 @@
 import { Head } from '@inertiajs/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { buildTournamentSchedule } from '@/lib/tournament-schedule';
+import type { ScheduleItem } from '@/lib/tournament-schedule';
 
 type Participant = {
     name: string;
@@ -36,7 +38,16 @@ type BracketStage = {
     placement_slots: number;
     teams_per_pool: number;
     pools: PoolInfo[];
+    ranked_teams?: RankedTeam[];
     elimination_tree: BracketRound[] | { winners: BracketRound[]; losers: BracketRound[]; grand_final: BracketRound };
+};
+
+type RankedTeam = {
+    rank: number;
+    name: string;
+    wins: number;
+    losses: number;
+    point_differential: number;
 };
 
 type CategoryFormat = {
@@ -48,6 +59,7 @@ type CategoryFormat = {
     point_system: string;
     game_to?: number | null;
     win_by?: number | null;
+    game_time?: number | null;
     pool_count?: number | null;
     advance_per_pool?: number | null;
 allow_draw?: boolean;
@@ -77,6 +89,13 @@ type Tournament = {
     title: string;
     start_date?: string | null;
     description?: string | null;
+    settings: {
+        start_time_in_hours: string;
+        end_time_in_hours: string;
+        default_match_duration_minutes: number;
+        default_rest_time_minutes: number;
+        default_court_counts: number;
+    };
 };
 
 type Props = {
@@ -94,24 +113,68 @@ const getFormatBadgeColor = (format: string) => {
     }
 };
 
+const formatScheduleTime = (value: Date): string =>
+    value.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+const formatScheduleDateTime = (value: Date): string =>
+    `${value.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} ${formatScheduleTime(value)}`;
+
+const formatDuration = (minutes: number): string => {
+    const days = Math.floor(minutes / (60 * 24));
+    const hours = Math.floor((minutes % (60 * 24)) / 60);
+    const remainingMinutes = minutes % 60;
+    const parts = [
+        days > 0 ? `${days}d` : null,
+        hours > 0 ? `${hours}h` : null,
+        remainingMinutes > 0 || (days === 0 && hours === 0) ? `${remainingMinutes}m` : null,
+    ].filter(Boolean);
+
+    return parts.join(' ');
+};
+
+const hasMatchOutsideDailyHours = (schedule: ScheduleItem[], tournament: Tournament): boolean => {
+    const [openingHour = 9, openingMinute = 0] = tournament.settings.start_time_in_hours.split(':').map(Number);
+    const [closingHour = 22, closingMinute = 0] = tournament.settings.end_time_in_hours.split(':').map(Number);
+    const openingMinutes = openingHour * 60 + openingMinute;
+    const closingMinutes = closingHour * 60 + closingMinute;
+
+    return schedule.some((item) => {
+        const closesAt = new Date(item.start);
+        closesAt.setHours(closingHour, closingMinute, 0, 0);
+
+        if (closingMinutes <= openingMinutes) {
+            closesAt.setDate(closesAt.getDate() + 1);
+        }
+
+        return item.end > closesAt;
+    });
+};
+
+const getCalendarDaysSpanned = (start: Date, finish: Date): number => {
+    const startDate = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+    const finishDate = Date.UTC(finish.getFullYear(), finish.getMonth(), finish.getDate());
+
+    return Math.floor((finishDate - startDate) / 86_400_000) + 1;
+};
+
 // ─── Match Card ─────────────────────────────────────────────────────────────
 
 function MatchCard({ slot }: { slot: BracketSlot }) {
     const top = slot.participants[0];
     const bottom = slot.participants[1];
     return (
-        <div className="relative flex w-44 flex-shrink-0 flex-col rounded-lg border bg-card shadow-sm">
+        <div className="relative flex w-56 flex-shrink-0 flex-col rounded-lg border bg-card shadow-sm">
             <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary/10 text-[10px] font-bold text-primary">
                     {top?.seed ?? '?'}
                 </span>
-                <span className="truncate text-xs font-medium">{top?.name ?? 'TBD'}</span>
+                <span className="line-clamp-2 text-xs font-medium" title={top?.name}>{top?.name ?? 'TBA'}</span>
             </div>
             <div className="flex items-center gap-2 px-3 py-2">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary/10 text-[10px] font-bold text-primary">
                     {bottom?.seed ?? '?'}
                 </span>
-                <span className="truncate text-xs font-medium">{bottom?.name ?? 'TBD'}</span>
+                <span className="line-clamp-2 text-xs font-medium" title={bottom?.name}>{bottom?.name ?? 'TBA'}</span>
             </div>
             <div className="absolute -top-2 left-2 rounded-full bg-muted px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {slot.match_label}
@@ -219,6 +282,29 @@ function RoundRobinStage({ stage }: { stage: BracketStage }) {
                 ))}
             </div>
 
+            {stage.ranked_teams && stage.ranked_teams.length > 0 && (
+                <div className="rounded-lg border bg-background p-4">
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Preliminary ranking</div>
+                    <div className="overflow-x-auto">
+                        <div className="min-w-[420px] overflow-hidden rounded-md border text-xs">
+                            <div className="grid grid-cols-[48px_minmax(180px,1fr)_70px_70px_90px] gap-2 bg-muted/40 px-3 py-2 font-semibold text-muted-foreground">
+                                <span>#</span><span>Qualifier</span><span>Wins</span><span>Losses</span><span>Point diff.</span>
+                            </div>
+                            {stage.ranked_teams.map((team) => (
+                                <div key={team.rank} className="grid grid-cols-[48px_minmax(180px,1fr)_70px_70px_90px] gap-2 border-t px-3 py-2">
+                                    <span className="font-semibold">{team.rank}</span>
+                                    <span className="truncate">{team.name}</span>
+                                    <span>{team.wins}</span>
+                                    <span>{team.losses}</span>
+                                    <span>{team.point_differential > 0 ? '+' : ''}{team.point_differential}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">Ranking order uses wins, then losses, then point differential. Results will replace these sample values.</p>
+                </div>
+            )}
+
             {Array.isArray(stage.elimination_tree) && stage.elimination_tree.length > 0 && (
                 <div className="rounded-lg border bg-background p-4">
                     <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Elimination Bracket</div>
@@ -322,6 +408,107 @@ function StageRenderer({ stage }: { stage: BracketStage }) {
     }
 }
 
+function SchedulePanel({
+    category,
+    categorySchedule,
+    schedule,
+    tournament,
+}: {
+    category: Category;
+    categorySchedule: ScheduleItem[];
+    schedule: ScheduleItem[];
+    tournament: Tournament;
+}) {
+    const start = schedule[0]?.start;
+    const finish = schedule.reduce<Date | undefined>(
+        (latest, item) => !latest || item.end > latest ? item.end : latest,
+        undefined,
+    );
+    const totalMinutes = start && finish ? Math.ceil((finish.getTime() - start.getTime()) / 60_000) : 0;
+    const playingMinutes = schedule.reduce((total, item) => total + item.durationMinutes, 0);
+    const daysSpanned = start && finish ? getCalendarDaysSpanned(start, finish) : 0;
+    const runsPastHours = hasMatchOutsideDailyHours(schedule, tournament);
+    const categoryStart = categorySchedule[0]?.start;
+    const categoryCallTime = categoryStart
+        ? new Date(categoryStart.getTime() - 60 * 60_000)
+        : undefined;
+    const categoryFinish = categorySchedule.reduce<Date | undefined>(
+        (latest, item) => !latest || item.end > latest ? item.end : latest,
+        undefined,
+    );
+
+    return (
+        <div className="mt-5 rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Estimated tournament schedule</div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Earlier rounds in each category get priority on all courts. The next category can begin 30 minutes after the prior category reaches quarterfinals, or semifinals when there are no quarterfinals, if a court is free.
+                        All players in a category are called together one hour before its first match.
+                    </p>
+                </div>
+                <div className={`rounded-lg border px-3 py-2 text-sm ${runsPastHours ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200' : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}`}>
+                    {runsPastHours ? 'A match exceeds the daily hours' : `Fits daily hours${daysSpanned > 1 ? ` across ${daysSpanned} days` : ''}`}
+                </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-4">
+                <div className="rounded-lg bg-background px-3 py-2"><div className="text-muted-foreground">Matches</div><div className="mt-1 font-semibold">{schedule.length}</div></div>
+                <div className="rounded-lg bg-background px-3 py-2"><div className="text-muted-foreground">Courts</div><div className="mt-1 font-semibold">{tournament.settings.default_court_counts}</div></div>
+                <div className="rounded-lg bg-background px-3 py-2"><div className="text-muted-foreground">Starts</div><div className="mt-1 font-semibold">{start ? formatScheduleDateTime(start) : '—'}</div></div>
+                <div className="rounded-lg bg-background px-3 py-2"><div className="text-muted-foreground">Total elapsed</div><div className="mt-1 font-semibold">{formatDuration(totalMinutes)}</div></div>
+                <div className="rounded-lg bg-background px-3 py-2"><div className="text-muted-foreground">Playing time</div><div className="mt-1 font-semibold">{formatDuration(playingMinutes)}</div></div>
+                <div className="rounded-lg bg-background px-3 py-2"><div className="text-muted-foreground">Tournament days</div><div className="mt-1 font-semibold">{daysSpanned || '—'}</div></div>
+                <div className="rounded-lg bg-background px-3 py-2"><div className="text-muted-foreground">Projected finish</div><div className="mt-1 font-semibold">{finish ? formatScheduleDateTime(finish) : '—'}</div></div>
+            </div>
+            {runsPastHours && (
+                <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                    At least one match duration exceeds the configured daily playing window ending at {tournament.settings.end_time_in_hours}.
+                </p>
+            )}
+            {categorySchedule.length > 0 && (
+                <div className="mt-5 border-t pt-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div className="text-sm font-semibold">{category.name} calling times</div>
+                            <p className="mt-1 text-xs text-muted-foreground">One calling time for all players in this category.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                            <div className="rounded-lg bg-background px-3 py-2">
+                                <span className="text-muted-foreground">All players call by: </span>
+                                <span className="font-semibold">{categoryCallTime ? formatScheduleDateTime(categoryCallTime) : '—'}</span>
+                            </div>
+                            <div className="rounded-lg bg-background px-3 py-2">
+                                <span className="text-muted-foreground">Category starts: </span>
+                                <span className="font-semibold">{categoryStart ? formatScheduleDateTime(categoryStart) : '—'}</span>
+                            </div>
+                            <div className="rounded-lg bg-background px-3 py-2">
+                                <span className="text-muted-foreground">Category finish: </span>
+                                <span className="font-semibold">{categoryFinish ? formatScheduleDateTime(categoryFinish) : '—'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-4 overflow-x-auto">
+                        <div className="min-w-[740px] overflow-hidden rounded-lg border bg-background">
+                            <div className="grid grid-cols-[170px_80px_minmax(200px,1fr)_100px_90px] gap-4 border-b bg-muted/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                <span>Match time</span><span>Court</span><span>Match</span><span>Stage</span><span>Duration</span>
+                            </div>
+                            {categorySchedule.map((item) => (
+                                <div key={item.id} className="grid grid-cols-[170px_80px_minmax(200px,1fr)_100px_90px] gap-4 border-b px-3 py-2 text-xs last:border-b-0">
+                                    <span className="font-semibold text-nowrap">{formatScheduleDateTime(item.start)}–{formatScheduleTime(item.end)}</span>
+                                    <span className="text-muted-foreground">Court {item.court}</span>
+                                    <span className="min-w-0 truncate" title={item.participants.join(' vs ')}>{item.participants.join(' vs ')}</span>
+                                    <span className="truncate text-muted-foreground">{item.stage}</span>
+                                    <span className="text-muted-foreground">{item.durationMinutes} min</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function TournamentBracketsPage({ tournament, categories }: Props) {
@@ -330,11 +517,24 @@ export default function TournamentBracketsPage({ tournament, categories }: Props
     );
     const [activeStageIndex, setActiveStageIndex] = useState(0);
     const activeCategory = categories.find((c) => c.id === activeCategoryId) || categories[0];
+    const tournamentSchedule = useMemo(
+        () => buildTournamentSchedule(categories, tournament),
+        [categories, tournament],
+    );
+    const activeCategorySchedule = tournamentSchedule.filter((item) => item.categoryId === activeCategory?.id);
 
     // Reset stage index when category changes
     const handleCategoryChange = (id: number) => {
         setActiveCategoryId(id);
         setActiveStageIndex(0);
+    };
+
+    const handleStageChange = (stageIndex: number) => {
+        setActiveStageIndex(stageIndex);
+        document.getElementById(`bracket-stage-${activeCategory?.id}-${stageIndex}`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+        });
     };
 
     const activeStage = activeCategory?.bracket_stages?.[activeStageIndex] ?? null;
@@ -408,7 +608,7 @@ export default function TournamentBracketsPage({ tournament, categories }: Props
                                 {activeCategory.bracket_stages && activeCategory.bracket_stages.length > 1 && (
                                     <div className="flex flex-wrap gap-1.5 mt-4">
                                         {activeCategory.bracket_stages.map((stage, idx) => (
-                                            <button key={idx} onClick={() => setActiveStageIndex(idx)}
+                                            <button key={idx} onClick={() => handleStageChange(idx)}
                                                 className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
                                                     activeStageIndex === idx ? 'border-primary/40 bg-primary/5 shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
                                                 }`}>
@@ -425,10 +625,10 @@ export default function TournamentBracketsPage({ tournament, categories }: Props
                                 )}
 
                                 {/* Stage Content */}
-                                <div className="mt-4">
+                                <div className="mt-4 space-y-4">
                                     {activeStage ? (
-                                        <div className="rounded-xl border bg-background p-4">
-                                            <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                        <div id={`bracket-stage-${activeCategory.id}-${activeStage.stage_index}`} className="scroll-mt-6 rounded-xl border bg-background p-4">
+                                            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                                 <span className="font-semibold uppercase tracking-wider">{activeStage.label}</span>
                                                 <span className="text-muted-foreground/30">|</span>
                                                 <span className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${getFormatBadgeColor(activeStage.competition_format)}`}>
@@ -451,6 +651,14 @@ export default function TournamentBracketsPage({ tournament, categories }: Props
                                         </div>
                                     )}
                                 </div>
+                                {activeCategory && activeCategorySchedule.length > 0 && (
+                                    <SchedulePanel
+                                        category={activeCategory}
+                                        categorySchedule={activeCategorySchedule}
+                                        schedule={tournamentSchedule}
+                                        tournament={tournament}
+                                    />
+                                )}
                             </section>
                         )}
                     </>
@@ -459,4 +667,3 @@ export default function TournamentBracketsPage({ tournament, categories }: Props
         </>
     );
 }
-

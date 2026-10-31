@@ -7,8 +7,11 @@ use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Models\Role;
 use App\Models\Status;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class OrganizationController extends Controller
 {
@@ -35,8 +38,20 @@ class OrganizationController extends Controller
 
         $uuid = (string) Str::uuid();
 
+        // dd($request->all());
+
+        $logo = $request->file('logo_image');
+        $banner = $request->file('banner_image');
+
+        if (! $this->hasUsableUpload($logo) || ! $this->hasUsableUpload($banner)) {
+            throw ValidationException::withMessages([
+                'logo_image' => 'The uploaded organization images could not be read. Please choose the images again.',
+                'banner_image' => 'The uploaded organization images could not be read. Please choose the images again.',
+            ]);
+        }
+
         try {
-            DB::transaction(function () use ($request, $user, $uuid) {
+            DB::transaction(function () use ($request, $user, $uuid, $logo, $banner) {
                 // Get or create pending-approval status for organizations
                 $organizationStatus = Status::firstOrCreate(
                     ['type' => 'organization', 'slug' => 'pending-approval'],
@@ -58,16 +73,13 @@ class OrganizationController extends Controller
                     ['name' => 'Approved', 'slug' => 'approved']
                 );
 
-                $logo = $request->file('logo_image');
-                $banner = $request->file('banner_image');
-
                 // Create the organization
                 $organization = Organization::create([
                     'uuid' => $uuid,
                     'name' => $request->input('name'),
                     'slug' => Str::slug($request->input('name')),
-                    'logo_image' => $logo ? $logo->store('organizations/logos', 'public') : null,
-                    'banner_image' => $banner ? $banner->store('organizations/banners', 'public') : null,
+                    'logo_image' => $this->storeOrganizationImage($logo, 'organizations/logos'),
+                    'banner_image' => $this->storeOrganizationImage($banner, 'organizations/banners'),
                     'email' => $request->input('email'),
                     'contact_number' => $request->input('contact_number'),
                     'website_url' => $request->input('website_url'),
@@ -95,6 +107,35 @@ class OrganizationController extends Controller
                 'name' => 'An error occurred while submitting your application. Please try again.',
             ]);
         }
+    }
+
+    private function hasUsableUpload(?UploadedFile $file): bool
+    {
+        $path = $file?->getPathname();
+
+        return $file?->isValid() === true
+            && is_string($path)
+            && $path !== ''
+            && is_file($path);
+    }
+
+    private function storeOrganizationImage(UploadedFile $file, string $directory): string
+    {
+        $path = $file->getPathname();
+        $contents = file_get_contents($path);
+
+        if ($contents === false) {
+            throw new \RuntimeException('Unable to read uploaded organization image.');
+        }
+
+        $extension = $file->guessExtension() ?: 'jpg';
+        $storagePath = trim($directory, '/').'/'.Str::uuid().'.'.$extension;
+
+        if (! Storage::disk('public')->put($storagePath, $contents)) {
+            throw new \RuntimeException('Unable to store uploaded organization image.');
+        }
+
+        return $storagePath;
     }
 
     public function applicationStatus($uuid)

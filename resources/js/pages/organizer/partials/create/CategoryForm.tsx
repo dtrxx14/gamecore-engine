@@ -13,6 +13,8 @@ type FormatStep = {
     point_system: string;
     game_to: string;
     win_by: string;
+    game_time: string;
+    tie_break_method: 'serve' | 'rally';
     pool_count: string;
     advance_per_pool: string;
     allow_draw: boolean;
@@ -21,6 +23,171 @@ type FormatStep = {
     court_change_trigger: 'none' | 'rally_count' | 'score_count' | 'game_end' | 'match_end';
     court_change_interval: number | null;
 };
+
+type FormatTemplate = Omit<FormatStep, 'id'>;
+
+const normalizeScoringFormat = (value?: string): string =>
+    value === 'standard' || value === 'rally-point' ? 'sudden-death' : value ?? 'sudden-death';
+
+const createTemplateFormat = (overrides: Partial<FormatTemplate>): FormatTemplate => ({
+    round_format: 'preliminary',
+    competition_format: 'round-robin',
+    scoring_format: 'sudden-death',
+    series_format: 'none',
+    point_system: 'rally-point',
+    game_to: '21',
+    win_by: '2',
+    game_time: '15',
+    tie_break_method: 'rally',
+    pool_count: '1',
+    advance_per_pool: '1',
+    allow_draw: true,
+    allow_wildcard: false,
+    allow_court_change: true,
+    court_change_trigger: 'game_end',
+    court_change_interval: null,
+    ...overrides,
+});
+
+const formatTemplates: Array<{
+    id: string;
+    name: string;
+    description: string;
+    formats: FormatTemplate[];
+}> = [
+    {
+        id: '16-teams-4-pools',
+        name: '16 teams · 4 pools',
+        description: '1 advances per pool → QF → SF → finals',
+        formats: [
+            createTemplateFormat({ pool_count: '4', advance_per_pool: '1' }),
+            createTemplateFormat({
+                round_format: 'quarter-finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '4',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'semi-finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '2',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'battle-for-third',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '1',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '1',
+                allow_draw: false,
+            }),
+        ],
+    },
+    {
+        id: '20-teams-4-pools',
+        name: '20 teams · 4 pools',
+        description: '2 advance per pool → QF → SF → finals',
+        formats: [
+            createTemplateFormat({ pool_count: '4', advance_per_pool: '2' }),
+            createTemplateFormat({
+                round_format: 'quarter-finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '4',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'semi-finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '2',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'battle-for-third',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '1',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '1',
+                allow_draw: false,
+            }),
+        ],
+    },
+    {
+        id: '32-teams-8-pools',
+        name: '32 teams · 8 pools',
+        description: '1 advances per pool → QF → SF → finals',
+        formats: [
+            createTemplateFormat({ pool_count: '8', advance_per_pool: '1' }),
+            createTemplateFormat({
+                round_format: 'quarter-finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '4',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'semi-finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '2',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'battle-for-third',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '1',
+                allow_draw: false,
+            }),
+            createTemplateFormat({
+                round_format: 'finals',
+                competition_format: 'single-elimination',
+                scoring_format: 'sudden-death',
+                point_system: 'standard-side-out',
+                pool_count: '1',
+                advance_per_pool: '1',
+                allow_draw: false,
+            }),
+        ],
+    },
+];
 
 export type CategoryFormPayload = {
     id: number;
@@ -41,6 +208,8 @@ export type CategoryFormPayload = {
         point_system: string;
         game_to?: number;
         win_by?: number;
+        game_time?: number;
+        tie_break_method?: 'serve' | 'rally';
         pool_count?: number;
         advance_per_pool?: number;
         allow_draw?: boolean;
@@ -51,16 +220,44 @@ export type CategoryFormPayload = {
     }>;
 };
 
+export type SavedFormatTemplate = {
+    id: number;
+    name: string;
+    description?: string | null;
+    formats: Array<{
+        round_format: string;
+        competition_format: string;
+        scoring_format: string;
+        series_format: string;
+        point_system: string;
+        game_to?: number | string;
+        win_by?: number | string;
+        game_time?: number | string;
+        tie_break_method?: 'serve' | 'rally';
+        pool_count?: number | string;
+        advance_per_pool?: number | string;
+        allow_draw?: boolean;
+        allow_wildcard?: boolean;
+        allow_court_change?: boolean;
+        court_change_trigger?: FormatStep['court_change_trigger'];
+        court_change_interval?: number | null;
+    }>;
+};
+
 export default function CategoryForm({
     onAdd,
     initial,
     mode,
     onCancel,
+    savedTemplates = [],
+    onSaveTemplate,
 }: {
     onCancel?: () => void;
     onAdd: (cat: any) => void;
     initial?: CategoryFormPayload | null;
     mode?: 'add' | 'edit';
+    savedTemplates?: SavedFormatTemplate[];
+    onSaveTemplate?: (name: string, description: string, formats: FormatTemplate[]) => void;
 }) {
     // Populate form when editing
     // (in add mode, initial is undefined)
@@ -89,6 +286,8 @@ export default function CategoryForm({
                           point_system: 'standard-side-out',
                           game_to: 51,
                           win_by: 1,
+                          game_time: 15,
+                          tie_break_method: 'rally',
                           pool_count: 4,
                           advance_per_pool: 1,
                           allow_draw: false,
@@ -102,11 +301,13 @@ export default function CategoryForm({
                     id: Date.now() + Math.floor(Math.random() * 1000000),
                     round_format: f.round_format,
                     competition_format: f.competition_format,
-                    scoring_format: f.scoring_format,
+                    scoring_format: normalizeScoringFormat(f.scoring_format),
                     series_format: f.series_format,
                     point_system: f.point_system ?? 'standard-side-out',
                     game_to: String(f.game_to ?? 51),
                     win_by: String(f.win_by ?? 1),
+                    game_time: String(f.game_time ?? 15),
+                    tie_break_method: (f.tie_break_method ?? 'rally') as FormatStep['tie_break_method'],
                     pool_count: String(f.pool_count ?? 4),
                     advance_per_pool: String(f.advance_per_pool ?? 1),
                     allow_draw: Boolean(f.allow_draw),
@@ -147,6 +348,8 @@ export default function CategoryForm({
                           point_system: 'standard-side-out',
                           game_to: 51,
                           win_by: 1,
+                          game_time: 15,
+                          tie_break_method: 'rally',
                           pool_count: 4,
                           advance_per_pool: 1,
                           allow_draw: false,
@@ -160,11 +363,13 @@ export default function CategoryForm({
                     id: Date.now() + Math.floor(Math.random() * 1000000),
                     round_format: f.round_format,
                     competition_format: f.competition_format,
-                    scoring_format: f.scoring_format,
+                    scoring_format: normalizeScoringFormat(f.scoring_format),
                     series_format: f.series_format,
                     point_system: f.point_system ?? 'standard-side-out',
                     game_to: String(f.game_to ?? 51),
                     win_by: String(f.win_by ?? 1),
+                    game_time: String(f.game_time ?? 15),
+                    tie_break_method: (f.tie_break_method ?? 'rally') as FormatStep['tie_break_method'],
                     pool_count: String(f.pool_count ?? 4),
                     advance_per_pool: String(f.advance_per_pool ?? 1),
                     allow_draw: Boolean(f.allow_draw),
@@ -178,6 +383,71 @@ export default function CategoryForm({
     }, [initial?.id]);
 
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [templateName, setTemplateName] = useState('');
+    const [templateDescription, setTemplateDescription] = useState('');
+    const [draftHydrated, setDraftHydrated] = useState(mode === 'edit');
+
+    useEffect(() => {
+        if (mode === 'edit') {
+            return;
+        }
+
+        try {
+            const savedDraft = window.localStorage.getItem('organizer-category-form-draft');
+
+            if (savedDraft) {
+                const draft = JSON.parse(savedDraft) as {
+                    name?: string;
+                    division?: string;
+                    description?: string;
+                    entryFee?: string;
+                    currency?: string;
+                    minPlayers?: string;
+                    maxPlayers?: string;
+                    teamSize?: string;
+                    teamType?: 'singles' | 'doubles' | 'team';
+                    formats?: FormatStep[];
+                };
+
+                if (draft.name !== undefined) setName(draft.name);
+                if (draft.division !== undefined) setDivision(draft.division);
+                if (draft.description !== undefined) setDescription(draft.description);
+                if (draft.entryFee !== undefined) setEntryFee(draft.entryFee);
+                if (draft.currency !== undefined) setCurrency(draft.currency);
+                if (draft.minPlayers !== undefined) setMinPlayers(draft.minPlayers);
+                if (draft.maxPlayers !== undefined) setMaxPlayers(draft.maxPlayers);
+                if (draft.teamSize !== undefined) setTeamSize(draft.teamSize);
+                if (draft.teamType !== undefined) setTeamType(draft.teamType);
+                if (draft.formats?.length) setFormats(draft.formats);
+            }
+        } catch {
+            window.localStorage.removeItem('organizer-category-form-draft');
+        } finally {
+            setDraftHydrated(true);
+        }
+    }, [mode]);
+
+    useEffect(() => {
+        if (mode === 'edit' || !draftHydrated) {
+            return;
+        }
+
+        window.localStorage.setItem(
+            'organizer-category-form-draft',
+            JSON.stringify({
+                name,
+                division,
+                description,
+                entryFee,
+                currency,
+                minPlayers,
+                maxPlayers,
+                teamSize,
+                teamType,
+                formats,
+            }),
+        );
+    }, [currency, description, division, draftHydrated, entryFee, formats, maxPlayers, minPlayers, mode, name, teamSize, teamType]);
 
 
 const addFormatStep = () => {
@@ -192,6 +462,8 @@ const addFormatStep = () => {
                 point_system: 'standard-side-out',
                 game_to: '51',
                 win_by: '1',
+                game_time: '15',
+                tie_break_method: 'rally',
                 pool_count: '4',
                 advance_per_pool: '1',
                 allow_draw: false,
@@ -205,6 +477,31 @@ const addFormatStep = () => {
 
     const removeFormatStep = (id: number) => {
         setFormats((current) => current.filter((format) => format.id !== id));
+    };
+
+    const applyFormatTemplate = (templateFormats: FormatTemplate[]) => {
+        setFormats(
+            templateFormats.map((format, index) => ({
+                id: Date.now() + index + Math.floor(Math.random() * 1000000),
+                ...format,
+            }))
+        );
+    };
+
+    const applySavedTemplate = (template: SavedFormatTemplate) => {
+        applyFormatTemplate(
+            template.formats.map((format) =>
+                createTemplateFormat({
+                    ...format,
+                    game_to: String(format.game_to ?? 21),
+                    win_by: String(format.win_by ?? 2),
+                    game_time: String(format.game_time ?? 15),
+                    tie_break_method: format.tie_break_method ?? 'rally',
+                    pool_count: String(format.pool_count ?? 1),
+                    advance_per_pool: String(format.advance_per_pool ?? 1),
+                })
+            )
+        );
     };
 
     const setFormatField = (id: number, field: keyof FormatStep, value: string | boolean | number | null) => {
@@ -258,11 +555,13 @@ const addFormatStep = () => {
             formats: formats.map((format) => ({
                 round_format: format.round_format,
                 competition_format: format.competition_format,
-                scoring_format: format.scoring_format,
+                scoring_format: normalizeScoringFormat(format.scoring_format),
                 series_format: format.series_format,
                 point_system: format.point_system,
                 game_to: Number(format.game_to),
                 win_by: Number(format.win_by),
+                game_time: format.game_time ? Number(format.game_time) : null,
+                tie_break_method: format.tie_break_method,
                 pool_count: Number(format.pool_count),
                 advance_per_pool: Number(format.advance_per_pool),
                 allow_draw: format.allow_draw,
@@ -283,7 +582,7 @@ const addFormatStep = () => {
         setMaxPlayers('96');
         setTeamSize('6');
         setTeamType('team');
-setFormats([
+        setFormats([
             {
                 id: Date.now(),
                 round_format: 'round-16',
@@ -293,6 +592,8 @@ setFormats([
                 point_system: 'standard-side-out',
                 game_to: '51',
                 win_by: '1',
+                game_time: '15',
+                tie_break_method: 'rally',
                 pool_count: '4',
                 advance_per_pool: '1',
                 allow_draw: false,
@@ -368,6 +669,78 @@ setFormats([
             </div>
 
             <div className="rounded-xl border border-border/70 bg-background p-3">
+                <div className="mb-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+                    <div className="mb-3">
+                        <div className="text-sm font-semibold">Start with a template</div>
+                        <p className="text-xs text-muted-foreground">Build the full tournament progression in one click, then adjust any step below.</p>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {formatTemplates.map((template) => (
+                            <Button
+                                key={template.id}
+                                type="button"
+                                variant="outline"
+                                className="h-auto min-w-0 w-full items-start justify-start whitespace-normal bg-background px-3 py-2 text-left"
+                                onClick={() => applyFormatTemplate(template.formats)}
+                            >
+                                <span className="flex min-w-0 flex-col items-start gap-0.5">
+                                    <span className="max-w-full break-words font-medium">{template.name}</span>
+                                    <span className="max-w-full break-words text-xs font-normal leading-4 text-muted-foreground">{template.description}</span>
+                                </span>
+                            </Button>
+                        ))}
+                    </div>
+                    {savedTemplates.length > 0 ? (
+                        <div className="mt-3 border-t border-primary/15 pt-3">
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">Saved templates</p>
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {savedTemplates.map((template) => (
+                                    <Button
+                                        key={template.id}
+                                        type="button"
+                                        variant="secondary"
+                                        className="h-auto min-w-0 w-full items-start justify-start whitespace-normal px-3 py-2 text-left"
+                                        onClick={() => applySavedTemplate(template)}
+                                    >
+                                        <span className="flex min-w-0 flex-col items-start gap-0.5">
+                                            <span className="max-w-full break-words font-medium">{template.name}</span>
+                                            <span className="max-w-full break-words text-xs font-normal leading-4 text-muted-foreground">{template.description || 'Saved tournament progression'}</span>
+                                        </span>
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+                    {onSaveTemplate ? (
+                        <div className="mt-3 flex flex-col gap-2 border-t border-primary/15 pt-3 sm:flex-row">
+                            <Input
+                                value={templateName}
+                                onChange={(event) => setTemplateName(event.target.value)}
+                                placeholder="Template name"
+                                aria-label="Template name"
+                            />
+                            <Input
+                                value={templateDescription}
+                                onChange={(event) => setTemplateDescription(event.target.value)}
+                                placeholder="Short description (optional)"
+                                aria-label="Template description"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={!templateName.trim() || formats.length === 0}
+                                onClick={() => {
+                                    onSaveTemplate(templateName.trim(), templateDescription.trim(), formats.map(({ id, ...format }) => format));
+                                    setTemplateName('');
+                                    setTemplateDescription('');
+                                }}
+                            >
+                                Save template
+                            </Button>
+                        </div>
+                    ) : null}
+                </div>
+
                 <div className="flex items-center justify-between gap-3">
                     <div>
                         <div className="text-sm font-semibold">Match format</div>
@@ -465,7 +838,7 @@ setFormats([
                                     </select>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-3 md:col-span-2">
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 md:col-span-2">
                                 <div>
                                     <Label htmlFor={`game_to_${format.id}`}>Game to</Label>
                                     <Input
@@ -495,6 +868,29 @@ setFormats([
                                         onChange={(e) => setFormatField(format.id, 'pool_count', e.target.value)}
                                         className="mt-1"
                                     />
+                                </div>
+                                <div>
+                                    <Label htmlFor={`game_time_${format.id}`}>Time limit (min)</Label>
+                                    <Input
+                                        id={`game_time_${format.id}`}
+                                        type="number"
+                                        min={1}
+                                        value={format.game_time}
+                                        onChange={(e) => setFormatField(format.id, 'game_time', e.target.value)}
+                                        className="mt-1"
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor={`tie_break_method_${format.id}`}>Tied when time expires</Label>
+                                    <select
+                                        id={`tie_break_method_${format.id}`}
+                                        value={format.tie_break_method}
+                                        onChange={(e) => setFormatField(format.id, 'tie_break_method', e.target.value)}
+                                        className="mt-1 w-full rounded-md border px-3 py-2"
+                                    >
+                                        <option value="serve">Win by serve</option>
+                                        <option value="rally">Win by rally</option>
+                                    </select>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3 md:col-span-2 items-center">

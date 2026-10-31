@@ -17,6 +17,22 @@ use Inertia\Response;
 
 class TournamentController extends Controller
 {
+    private function normalizeCourtChangeTrigger(?string $trigger): string
+    {
+        return match ($trigger) {
+            'rally_count' => 'rally-count',
+            'score_count' => 'score-count',
+            'game_end' => 'game-end',
+            'match_end' => 'match-end',
+            default => 'none',
+        };
+    }
+
+    private function formatCourtChangeTriggerForFrontend(?string $trigger): string
+    {
+        return str_replace('-', '_', $trigger ?? 'none');
+    }
+
     public function show(Request $request, string $organization): Response
     {
         $user = $request->user();
@@ -44,7 +60,56 @@ class TournamentController extends Controller
                 'slug' => $membership->role?->slug,
             ],
             'organizationUuid' => $membership->organization->uuid,
+            'formatTemplates' => $membership->organization->formatTemplates()
+                ->orderBy('name')
+                ->get(['id', 'name', 'description', 'formats']),
         ]);
+    }
+
+    public function storeFormatTemplate(Request $request, string $organization): RedirectResponse
+    {
+        $membership = $request->user()->organizationMembers()
+            ->whereHas('organization', fn ($query) => $query->where('uuid', $organization))
+            ->whereHas('organization.status', fn ($query) => $query->where('slug', 'approved'))
+            ->first();
+
+        abort_unless($membership?->organization, 404);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'formats' => ['required', 'array', 'min:1'],
+            'formats.*.round_format' => ['required', 'string', 'in:preliminary,round-32,round-16,quarter-finals,battle-for-third,semi-finals,finals'],
+            'formats.*.competition_format' => ['required', 'string', 'in:round-robin,single-elimination,double-elimination,swiss-system'],
+            'formats.*.scoring_format' => ['required', 'string', 'in:standard,rally-point,sudden-death,deuce,score-by-serve'],
+            'formats.*.series_format' => ['required', 'string', 'in:none,best-of-3,best-of-5'],
+            'formats.*.point_system' => ['required', 'string', 'in:standard-side-out,rally-point'],
+            'formats.*.game_to' => ['nullable', 'integer', 'min:1'],
+            'formats.*.win_by' => ['nullable', 'integer', 'min:1'],
+            'formats.*.game_time' => ['nullable', 'integer', 'min:1'],
+            'formats.*.tie_break_method' => ['nullable', 'string', 'in:serve,rally'],
+            'formats.*.pool_count' => ['nullable', 'integer', 'min:0'],
+            'formats.*.advance_per_pool' => ['nullable', 'integer', 'min:0'],
+            'formats.*.allow_draw' => ['nullable', 'boolean'],
+            'formats.*.allow_wildcard' => ['nullable', 'boolean'],
+            'formats.*.allow_court_change' => ['nullable', 'boolean'],
+            'formats.*.court_change_trigger' => ['nullable', 'string', 'in:none,rally_count,score_count,game_end,match_end'],
+            'formats.*.court_change_interval' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $validated['formats'] = array_map(
+            fn (array $format): array => [
+                ...$format,
+                'scoring_format' => in_array($format['scoring_format'] ?? '', ['standard', 'rally-point'], true)
+                    ? 'sudden-death'
+                    : $format['scoring_format'],
+            ],
+            $validated['formats'],
+        );
+
+        $membership->organization->formatTemplates()->create($validated);
+
+        return back()->with('success', 'Format template saved successfully.');
     }
 
     public function store(Request $request): RedirectResponse
@@ -54,7 +119,7 @@ class TournamentController extends Controller
             'banner_image' => ['nullable', 'image', 'max:10240'],
             'start_date' => ['required', 'date'],
             'description' => ['nullable', 'string'],
-            
+
             'allow_waitlist' => ['required', 'boolean'],
             'call_time_in_hours' => ['required', 'string', 'max:10'],
             'start_time_in_hours' => ['required', 'string', 'max:10'],
@@ -82,11 +147,13 @@ class TournamentController extends Controller
             'categories.*.formats' => ['nullable', 'array'],
             'categories.*.formats.*.round_format' => ['required_with:categories.*.formats.*', 'string', 'in:preliminary,round-32,round-16,quarter-finals,battle-for-third,semi-finals,finals'],
             'categories.*.formats.*.competition_format' => ['required_with:categories.*.formats.*', 'string', 'in:round-robin,single-elimination,double-elimination,swiss-system'],
-            'categories.*.formats.*.scoring_format' => ['required_with:categories.*.formats.*', 'string', 'in:sudden-death,deuce,score-by-serve'],
+            'categories.*.formats.*.scoring_format' => ['required_with:categories.*.formats.*', 'string', 'in:standard,rally-point,sudden-death,deuce,score-by-serve'],
             'categories.*.formats.*.series_format' => ['required_with:categories.*.formats.*', 'string', 'in:none,best-of-3,best-of-5'],
             'categories.*.formats.*.point_system' => ['required_with:categories.*.formats.*', 'string', 'in:standard-side-out,rally-point'],
             'categories.*.formats.*.game_to' => ['nullable', 'integer', 'min:1'],
             'categories.*.formats.*.win_by' => ['nullable', 'integer', 'min:1'],
+            'categories.*.formats.*.game_time' => ['nullable', 'integer', 'min:1'],
+            'categories.*.formats.*.tie_break_method' => ['nullable', 'string', 'in:serve,rally'],
             'categories.*.formats.*.pool_count' => ['nullable', 'integer', 'min:0'],
             'categories.*.formats.*.advance_per_pool' => ['nullable', 'integer', 'min:0'],
             'categories.*.formats.*.allow_draw' => ['nullable', 'boolean'],
@@ -125,12 +192,12 @@ class TournamentController extends Controller
                 ->first()?->organization;
         }
 
-        if (!$organization) {
+        if (! $organization) {
             $organization = auth()->user()->approvedOrganization();
         }
 
         try {
-            
+
             $tournament = null;
 
             \DB::beginTransaction();
@@ -196,17 +263,19 @@ class TournamentController extends Controller
                                 'tournament_category_id' => $category->id,
                                 'round_format' => $format['round_format'] ?? '',
                                 'competition_format' => $format['competition_format'] ?? '',
-                                'scoring_format' => $format['scoring_format'] ?? '',
+                                'scoring_format' => in_array($format['scoring_format'] ?? '', ['standard', 'rally-point'], true) ? 'sudden-death' : ($format['scoring_format'] ?? ''),
                                 'series_format' => $format['series_format'] ?? '',
                                 'point_system' => $format['point_system'] ?? 'standard-side-out',
                                 'game_to' => $format['game_to'] ?? null,
                                 'win_by' => $format['win_by'] ?? null,
+                                'game_time' => $format['game_time'] ?? null,
+                                'tie_break_method' => $format['tie_break_method'] ?? 'rally',
                                 'pool_count' => $format['pool_count'] ?? null,
                                 'advance_per_pool' => $format['advance_per_pool'] ?? null,
                                 'allow_draw' => $format['allow_draw'] ?? false,
                                 'allow_wildcard' => $format['allow_wildcard'] ?? false,
                                 'allow_court_change' => $format['allow_court_change'] ?? false,
-                                'court_change_trigger' => $format['court_change_trigger'] ?? 'none',
+                                'court_change_trigger' => $this->normalizeCourtChangeTrigger($format['court_change_trigger'] ?? null),
                                 'court_change_interval' => $format['court_change_interval'] ?? null,
                             ]);
                         }
@@ -215,17 +284,19 @@ class TournamentController extends Controller
                             'tournament_category_id' => $category->id,
                             'round_format' => $cat['format']['round_format'] ?? '',
                             'competition_format' => $cat['format']['competition_format'] ?? '',
-                            'scoring_format' => $cat['format']['scoring_format'] ?? '',
+                            'scoring_format' => in_array($cat['format']['scoring_format'] ?? '', ['standard', 'rally-point'], true) ? 'sudden-death' : ($cat['format']['scoring_format'] ?? ''),
                             'series_format' => $cat['format']['series_format'] ?? '',
                             'point_system' => $cat['format']['point_system'] ?? 'standard-side-out',
                             'game_to' => $cat['format']['game_to'] ?? null,
                             'win_by' => $cat['format']['win_by'] ?? null,
+                            'game_time' => $cat['format']['game_time'] ?? null,
+                            'tie_break_method' => $cat['format']['tie_break_method'] ?? 'rally',
                             'pool_count' => $cat['format']['pool_count'] ?? null,
                             'advance_per_pool' => $cat['format']['advance_per_pool'] ?? null,
                             'allow_draw' => $cat['format']['allow_draw'] ?? false,
                             'allow_wildcard' => $cat['format']['allow_wildcard'] ?? false,
                             'allow_court_change' => $cat['format']['allow_court_change'] ?? false,
-                            'court_change_trigger' => $cat['format']['court_change_trigger'] ?? 'none',
+                            'court_change_trigger' => $this->normalizeCourtChangeTrigger($cat['format']['court_change_trigger'] ?? null),
                             'court_change_interval' => $cat['format']['court_change_interval'] ?? null,
                         ]);
                     }
@@ -235,6 +306,7 @@ class TournamentController extends Controller
             \DB::commit();
         } catch (\Throwable $e) {
             \DB::rollBack();
+            report($e);
 
             return redirect()->back()->withInput()->withErrors([
                 'error' => 'Failed to create tournament. Please try again.',
@@ -277,12 +349,14 @@ class TournamentController extends Controller
                     'point_system' => $item->point_system,
                     'game_to' => $item->game_to,
                     'win_by' => $item->win_by,
+                    'game_time' => $item->game_time,
+                    'tie_break_method' => $item->tie_break_method,
                     'pool_count' => $item->pool_count,
                     'advance_per_pool' => $item->advance_per_pool,
                     'allow_draw' => $item->allow_draw,
                     'allow_wildcard' => $item->allow_wildcard,
                     'allow_court_change' => $item->allow_court_change,
-                    'court_change_trigger' => $item->court_change_trigger,
+                    'court_change_trigger' => $this->formatCourtChangeTriggerForFrontend($item->court_change_trigger),
                     'court_change_interval' => $item->court_change_interval,
                 ])->values()->toArray(),
                 'bracket_stages' => $this->buildBracketStages($category, $totalTeams),
@@ -295,6 +369,13 @@ class TournamentController extends Controller
                 'title' => $tournament->title,
                 'start_date' => $tournament->start_date,
                 'description' => $tournament->description,
+                'settings' => [
+                    'start_time_in_hours' => $tournament->settings?->start_time_in_hours ?? '09:00',
+                    'end_time_in_hours' => $tournament->settings?->end_time_in_hours ?? '22:00',
+                    'default_match_duration_minutes' => $tournament->settings?->default_match_duration_minutes ?? 30,
+                    'default_rest_time_minutes' => $tournament->settings?->default_rest_time_minutes ?? 5,
+                    'default_court_counts' => $tournament->settings?->default_court_counts ?? 1,
+                ],
             ],
             'categories' => $categories,
         ]);
@@ -318,8 +399,11 @@ class TournamentController extends Controller
 
             // Determine team count for this stage
             $stageTeamCount = $totalTeams;
-            if ($index > 0 && !empty($previousAdvancingTeams)) {
-                $stageTeamCount = count($previousAdvancingTeams);
+            if ($index > 0 && ! empty($previousAdvancingTeams)) {
+                $elimFmt = $format->round_format ?? 'round-16'; // Default to round-16 if not set
+                $compFmt = $format->competition_format ?? 'single-elimination';
+                $poolCount = max(1, $format->pool_count ?? 1);
+                $advancePerPool = max(1, $format->advance_per_pool ?? 1);
             }
 
             // Determine slot count based on round format
@@ -346,6 +430,7 @@ class TournamentController extends Controller
                 'placement_slots' => $placementSlots,
                 'teams_per_pool' => 0,
                 'pools' => [],
+                'ranked_teams' => [],
                 'elimination_tree' => [],
             ];
 
@@ -364,7 +449,9 @@ class TournamentController extends Controller
                         if ($index === 0) {
                             // First stage: use direct team numbers
                             $teamNum = $teamIndex + 1;
-                            if ($teamNum > $stageTeams) break;
+                            if ($teamNum > $stageTeams) {
+                                break;
+                            }
                             $poolTeams[] = [
                                 'name' => sprintf('TEAM %d', $teamNum),
                                 'seed' => $teamNum,
@@ -377,7 +464,9 @@ class TournamentController extends Controller
                         }
                     }
 
-                    if (empty($poolTeams)) break;
+                    if (empty($poolTeams)) {
+                        break;
+                    }
 
                     // Generate all-vs-all matches
                     $matches = [];
@@ -402,30 +491,78 @@ class TournamentController extends Controller
                 }
                 $stage['pools'] = $pools;
 
-                // Build elimination tree for advancing teams from pools
-                $advancing = $poolCount * $advancePerPool;
-                $stage['elimination_tree'] = $this->buildEliminationTree($advancing, 'Elimination');
-
                 // Track advancing teams for next stage
                 $previousAdvancingTeams = [];
+                $rankedTeams = [];
+                $rank = 1;
                 for ($p = 0; $p < $poolCount; $p++) {
                     for ($a = 0; $a < $advancePerPool; $a++) {
-                        $previousAdvancingTeams[] = [
-                            'name' => sprintf('Pool %s ADV #%d', chr(65 + $p), $a + 1),
+                        $rankedTeam = [
+                            'rank' => $rank,
+                            'name' => sprintf('Rank %d · Pool %s qualifier', $rank, chr(65 + $p)),
                             'seed' => null,
+                            'wins' => 0,
+                            'losses' => 0,
+                            'point_differential' => 0,
                         ];
+                        $rankedTeams[] = $rankedTeam;
+                        $previousAdvancingTeams[] = $rankedTeam;
+                        $rank++;
                     }
                 }
+                $stage['ranked_teams'] = $rankedTeams;
 
             } elseif ($compFmt === 'single-elimination') {
                 // Single elimination stage
                 $treeTeams = $stageTeams;
 
-                if ($index > 0 && !empty($previousAdvancingTeams)) {
+                if ($index > 0 && ! empty($previousAdvancingTeams)) {
                     $treeTeams = count($previousAdvancingTeams);
                 }
 
-                $stage['elimination_tree'] = $this->buildEliminationTree($treeTeams, $stageLabel, $index === 0);
+                $sourceIndex = $index - 1;
+                if ($elimFmt === 'finals' && $sourceIndex >= 0 && $formats[$sourceIndex]->round_format === 'battle-for-third') {
+                    $sourceIndex--;
+                }
+                $sourceLabel = $sourceIndex >= 0
+                    ? str_replace('-', ' ', ucwords($formats[$sourceIndex]->round_format, '-'))
+                    : 'previous round';
+
+                $stage['elimination_tree'] = match ($elimFmt) {
+                    'quarter-finals' => $this->buildQuarterFinalTree($previousAdvancingTeams),
+                    'semi-finals' => $this->buildSemiFinalTree(),
+                    default => $this->buildEliminationTree($treeTeams, $stageLabel, $index === 0, $sourceLabel),
+                };
+
+                if ($elimFmt === 'quarter-finals' || $elimFmt === 'semi-finals') {
+                    $stage['elimination_tree'] = array_slice($stage['elimination_tree'], 0, 1);
+                }
+
+                if ($elimFmt === 'battle-for-third' || $elimFmt === 'finals') {
+                    $isThirdPlace = $elimFmt === 'battle-for-third';
+                    $firstParticipant = sprintf(
+                        '%s of Semi finals Match 1',
+                        $isThirdPlace ? 'Loser' : 'Winner'
+                    );
+                    $secondParticipant = sprintf(
+                        '%s of Semi finals Match 2',
+                        $isThirdPlace ? 'Loser' : 'Winner'
+                    );
+
+                    $stage['elimination_tree'] = [[
+                        'label' => $isThirdPlace ? 'Battle for Third' : 'Final',
+                        'match_count' => 1,
+                        'slots' => [[
+                            'match_label' => $isThirdPlace ? 'Third-place match' : 'Championship',
+                            'name' => sprintf('%s vs %s', $firstParticipant, $secondParticipant),
+                            'participants' => [
+                                ['name' => $firstParticipant, 'seed' => null],
+                                ['name' => $secondParticipant, 'seed' => null],
+                            ],
+                            'winner_label' => $isThirdPlace ? 'Third Place' : 'Champion',
+                        ]],
+                    ]];
+                }
                 $stage['pools'] = [];
 
                 // Track winner for next stage (only 1 advances: the champion)
@@ -450,7 +587,9 @@ class TournamentController extends Controller
                     for ($p = 0; $p < floor($stageTeams / 2); $p++) {
                         $t1 = $p * 2 + 1;
                         $t2 = $p * 2 + 2;
-                        if ($t2 > $stageTeams) break;
+                        if ($t2 > $stageTeams) {
+                            break;
+                        }
                         $pairs[] = [
                             'match_label' => sprintf('Table %d', $p + 1),
                             'name' => sprintf('TEAM %d vs TEAM %d', $t1, $t2),
@@ -477,7 +616,7 @@ class TournamentController extends Controller
             $stages[] = $stage;
 
             // For finals stage (last format), the champion is the winner
-            if ($elimFmt === 'finals' || $elimFmt === 'battle-for-third') {
+            if ($elimFmt === 'finals') {
                 break;
             }
         }
@@ -485,12 +624,66 @@ class TournamentController extends Controller
         return $stages;
     }
 
+    private function buildQuarterFinalTree(array $rankedTeams): array
+    {
+        $pairings = [[0, 7], [1, 6], [2, 5], [3, 4]];
+        $slots = [];
+
+        foreach ($pairings as $index => [$firstIndex, $secondIndex]) {
+            $first = $rankedTeams[$firstIndex] ?? ['name' => 'TBA', 'seed' => null];
+            $second = $rankedTeams[$secondIndex] ?? ['name' => 'TBA', 'seed' => null];
+            $slots[] = [
+                'match_label' => sprintf('Quarter-final %d', $index + 1),
+                'name' => sprintf('%s vs %s', $first['name'], $second['name']),
+                'participants' => [
+                    ['name' => $first['name'], 'seed' => $first['rank'] ?? null],
+                    ['name' => $second['name'], 'seed' => $second['rank'] ?? null],
+                ],
+                'winner_label' => sprintf('Winner of Quarter-finals Match %d', $index + 1),
+            ];
+        }
+
+        return [[
+            'label' => 'Quarter-finals',
+            'match_count' => count($slots),
+            'slots' => $slots,
+        ]];
+    }
+
+    private function buildSemiFinalTree(): array
+    {
+        $slots = [];
+        foreach ([1, 2] as $index) {
+            $firstMatch = $index === 1 ? 1 : 2;
+            $secondMatch = $index === 1 ? 4 : 3;
+            $first = sprintf('Winner of Quarter-finals Match %d', $firstMatch);
+            $second = sprintf('Winner of Quarter-finals Match %d', $secondMatch);
+            $slots[] = [
+                'match_label' => sprintf('Semi-final %d', $index),
+                'name' => sprintf('%s vs %s', $first, $second),
+                'participants' => [
+                    ['name' => $first, 'seed' => null],
+                    ['name' => $second, 'seed' => null],
+                ],
+                'winner_label' => sprintf('Winner of Semi-finals Match %d', $index),
+            ];
+        }
+
+        return [[
+            'label' => 'Semi-finals',
+            'match_count' => 2,
+            'slots' => $slots,
+        ]];
+    }
+
     /**
      * Build a single-elimination bracket tree.
      */
-    private function buildEliminationTree(int $teamCount, string $label, bool $isFirstStage = true): array
+    private function buildEliminationTree(int $teamCount, string $label, bool $isFirstStage = true, string $sourceLabel = 'previous round'): array
     {
-        if ($teamCount < 2) return [];
+        if ($teamCount < 2) {
+            return [];
+        }
 
         $rounds = [];
         $currentSlots = $teamCount;
@@ -509,7 +702,7 @@ class TournamentController extends Controller
             $rounds[] = [
                 'label' => $roundLabel,
                 'match_count' => $matchCount,
-                'slots' => array_map(function (int $slotIndex) use ($isFirstRound, $isFinalRound, $isFirstStage) {
+                'slots' => array_map(function (int $slotIndex) use ($isFirstRound, $isFinalRound, $isFirstStage, $label, $sourceLabel) {
                     $matchNumber = $slotIndex + 1;
 
                     if ($isFirstRound && $isFirstStage) {
@@ -525,35 +718,44 @@ class TournamentController extends Controller
                     }
 
                     if ($isFirstRound) {
+                        $firstParticipant = sprintf('Winner of %s Bracket %s/%d', $sourceLabel, chr(65 + $slotIndex), $slotIndex * 2 + 1);
+                        $secondParticipant = sprintf('Winner of %s Bracket %s/%d', $sourceLabel, chr(65 + $slotIndex), $slotIndex * 2 + 2);
+
                         return [
                             'match_label' => sprintf('Match %d', $matchNumber),
-                            'name' => sprintf('ADV #%d vs ADV #%d', $slotIndex * 2 + 1, $slotIndex * 2 + 2),
+                            'name' => sprintf('%s vs %s', $firstParticipant, $secondParticipant),
                             'participants' => [
-                                ['name' => sprintf('ADVANCED #%d', $slotIndex * 2 + 1), 'seed' => null],
-                                ['name' => sprintf('ADVANCED #%d', $slotIndex * 2 + 2), 'seed' => null],
+                                ['name' => $firstParticipant, 'seed' => null],
+                                ['name' => $secondParticipant, 'seed' => null],
                             ],
                             'winner_label' => sprintf('Winner %d', $matchNumber),
                         ];
                     }
 
                     if ($isFinalRound) {
+                        $firstParticipant = sprintf('Winner of %s Match %d', $label, $slotIndex * 2 + 1);
+                        $secondParticipant = sprintf('Winner of %s Match %d', $label, $slotIndex * 2 + 2);
+
                         return [
                             'match_label' => 'Championship',
                             'name' => 'CHAMPIONSHIP MATCH',
                             'participants' => [
-                                ['name' => sprintf('WINNER %d', $slotIndex * 2 + 1), 'seed' => null],
-                                ['name' => sprintf('WINNER %d', $slotIndex * 2 + 2), 'seed' => null],
+                                ['name' => $firstParticipant, 'seed' => null],
+                                ['name' => $secondParticipant, 'seed' => null],
                             ],
                             'winner_label' => '🏆 CHAMPION',
                         ];
                     }
 
+                    $firstParticipant = sprintf('Winner of %s Match %d', $label, $slotIndex * 2 + 1);
+                    $secondParticipant = sprintf('Winner of %s Match %d', $label, $slotIndex * 2 + 2);
+
                     return [
                         'match_label' => sprintf('Match %d', $matchNumber),
-                        'name' => sprintf('WINNER %d vs WINNER %d', $slotIndex * 2 + 1, $slotIndex * 2 + 2),
+                        'name' => sprintf('%s vs %s', $firstParticipant, $secondParticipant),
                         'participants' => [
-                            ['name' => sprintf('WINNER %d', $slotIndex * 2 + 1), 'seed' => null],
-                            ['name' => sprintf('WINNER %d', $slotIndex * 2 + 2), 'seed' => null],
+                            ['name' => $firstParticipant, 'seed' => null],
+                            ['name' => $secondParticipant, 'seed' => null],
                         ],
                         'winner_label' => sprintf('Winner %d', $matchNumber),
                     ];
@@ -600,6 +802,7 @@ class TournamentController extends Controller
                             'winner_label' => 'L-CHAMP',
                         ];
                     }
+
                     return [
                         'match_label' => sprintf('L-Match %d', $matchNumber),
                         'name' => sprintf('L-WINNER %d vs L-WINNER %d', $slotIndex * 2 + 1, $slotIndex * 2 + 2),

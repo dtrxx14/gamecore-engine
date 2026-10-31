@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('live_teams', function (Blueprint $table) {
-            $table->unsignedInteger('bracket')->nullable()->after('name');
+            $table->string('bracket')->nullable()->after('name');
         });
     }
 
