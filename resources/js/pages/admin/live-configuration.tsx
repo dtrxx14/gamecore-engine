@@ -547,7 +547,7 @@ export default function LiveConfiguration({ configurations }: Props) {
                                                     <div className="font-medium">{match.configuration}</div>
                                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                         {match.category}
-                                                        {match.is_sample && <Badge variant="outline">Sample</Badge>}
+                                                        {match.is_sample && <Badge variant="outline">.</Badge>}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3">

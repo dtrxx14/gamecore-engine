@@ -190,15 +190,15 @@ class LiveConfigurationController extends Controller
 
         if ($umpire->email === self::APRIL_UMPIRE_EMAIL && self::SHOW_APRIL_UMPIRE_SAMPLE_MATCHES) {
             $demoMatchDetails = [
-                ['configuration' => 'October Rally Classic', 'category' => 'Mixed Intermediate Doubles', 'team_a' => 'Mia Santos', 'team_b' => 'Ethan Cruz', 'score_a' => 11, 'score_b' => 8],
-                ['configuration' => 'Citywide Pickleball Open', 'category' => 'Women’s Intermediate Doubles', 'team_a' => 'Olivia Reyes', 'team_b' => 'Chloe Garcia', 'score_a' => 11, 'score_b' => 7],
-                ['configuration' => 'Autumn Courts Championship', 'category' => 'Men’s Intermediate Doubles', 'team_a' => 'Noah Lim / Lucas Tan', 'team_b' => 'Liam Flores / Mateo Ruiz', 'score_a' => 9, 'score_b' => 11],
-                ['configuration' => 'Riverside Invitational', 'category' => 'Mixed Intermediate Doubles', 'team_a' => 'Ava Mendoza', 'team_b' => 'Caleb Dizon', 'score_a' => 11, 'score_b' => 6],
-                ['configuration' => 'Weekend Rally Series', 'category' => 'Men’s Intermediate Doubles', 'team_a' => 'Gabriel Torres', 'team_b' => 'Daniel Navarro', 'score_a' => 11, 'score_b' => 9],
-                ['configuration' => 'Community Cup Finals', 'category' => 'Women’s Intermediate Doubles', 'team_a' => 'Isabella Ramos / Sofia Cruz', 'team_b' => 'Grace Bautista / Ella Flores', 'score_a' => 8, 'score_b' => 11],
-                ['configuration' => 'Harborview Sports Open', 'category' => 'Mixed Intermediate Doubles', 'team_a' => 'Samuel Aquino', 'team_b' => 'Zoe Castillo', 'score_a' => 11, 'score_b' => 5],
-                ['configuration' => 'Metro Rec League', 'category' => 'Men’s Intermediate Doubles', 'team_a' => 'Adrian Valdez / Marco Santos', 'team_b' => 'Julian Reyes / Enzo Garcia', 'score_a' => 11, 'score_b' => 10],
-                ['configuration' => 'Sunday Doubles Challenge', 'category' => 'Women’s Intermediate Doubles', 'team_a' => 'Amara Villanueva', 'team_b' => 'Nina Mercado', 'score_a' => 7, 'score_b' => 11],
+                ['configuration' => 'October Rally Classic', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'Mia Santos', 'team_b' => 'Ethan Cruz', 'score_a' => 11, 'score_b' => 8],
+                ['configuration' => 'Citywide Pickleball Open', 'category' => 'Intermediate Womens Doubles', 'team_a' => 'Olivia Reyes', 'team_b' => 'Chloe Garcia', 'score_a' => 11, 'score_b' => 7],
+                ['configuration' => 'Autumn Courts Championship', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'Noah Lim / Lucas Tan', 'team_b' => 'Liam Flores / Mateo Ruiz', 'score_a' => 9, 'score_b' => 11],
+                ['configuration' => 'Riverside Invitational', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'Ava Mendoza', 'team_b' => 'Caleb Dizon', 'score_a' => 11, 'score_b' => 6],
+                ['configuration' => 'Weekend Rally Series', 'category' => 'Intermediate Doubles', 'team_a' => 'Gabriel Torres', 'team_b' => 'Daniel Navarro', 'score_a' => 11, 'score_b' => 9],
+                ['configuration' => 'Community Cup Finals', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'Isabella Ramos / Sofia Cruz', 'team_b' => 'Grace Bautista / Ella Flores', 'score_a' => 8, 'score_b' => 11],
+                ['configuration' => 'Harborview Sports Open', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'Samuel Aquino', 'team_b' => 'Zoe Castillo', 'score_a' => 11, 'score_b' => 5],
+                ['configuration' => 'Metro Rec League', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'Adrian Valdez / Marco Santos', 'team_b' => 'Julian Reyes / Enzo Garcia', 'score_a' => 11, 'score_b' => 10],
+                ['configuration' => 'Sunday Doubles Challenge', 'category' => 'Intermediate Womens Doubles', 'team_a' => 'Amara Villanueva', 'team_b' => 'Nina Mercado', 'score_a' => 7, 'score_b' => 11],
             ];
 
             for ($sampleNumber = 1; $sampleNumber <= self::APRIL_UMPIRE_SAMPLE_MATCH_COUNT; $sampleNumber++) {
