@@ -39,17 +39,17 @@ class LiveConfigurationController extends Controller
 
     public function umpireMatchCounts(): JsonResponse
     {
-        $matchCounts = DB::table('tournament_matches')
-            ->select('official_id')
+        $matchCounts = DB::table('live_match_scores')
+            ->select('umpire_id')
             ->selectRaw('COUNT(*) AS total_matches')
-            ->whereNotNull('official_id')
-            ->groupBy('official_id');
+            ->whereNotNull('umpire_id')
+            ->groupBy('umpire_id');
 
         $umpires = User::query()
             ->join('roles', 'users.role_id', '=', 'roles.id')
             ->leftJoin('player_information', 'users.id', '=', 'player_information.user_id')
             ->leftJoinSub($matchCounts, 'match_counts', function ($join): void {
-                $join->on('users.id', '=', 'match_counts.official_id');
+                $join->on('users.id', '=', 'match_counts.umpire_id');
             })
             ->where('roles.type', 'login')
             ->where('roles.slug', 'umpire')
@@ -83,25 +83,27 @@ class LiveConfigurationController extends Controller
     {
         abort_unless($umpire->role?->slug === 'umpire', 404);
 
-        $matches = DB::table('tournament_matches as matches')
-            ->leftJoin('tournament_categories as categories', 'matches.tournament_category_id', '=', 'categories.id')
-            ->leftJoin('tournaments', 'categories.tournament_id', '=', 'tournaments.id')
+        $matches = DB::table('live_match_scores as matches')
+            ->leftJoin('live_categories as categories', 'matches.category_id', '=', 'categories.id')
+            ->leftJoin('live_configurations', 'matches.live_configuration_id', '=', 'live_configurations.id')
             ->leftJoin('statuses', 'matches.status_id', '=', 'statuses.id')
-            ->where('matches.official_id', $umpire->id)
+            ->where('matches.umpire_id', $umpire->id)
             ->select([
                 'matches.id',
                 'matches.team_a_id',
                 'matches.team_b_id',
                 'matches.team_a_score',
                 'matches.team_b_score',
-                'matches.scheduled_at',
-                'matches.started_at',
-                'matches.ended_at',
+                'matches.start_play_at',
+                'matches.end_play_at',
+                'matches.updated_at',
+                'matches.court_number',
                 'categories.name as category_name',
-                'tournaments.title as tournament_name',
+                'live_configurations.name as configuration_name',
                 'statuses.name as status_name',
             ])
-            ->orderByDesc('matches.scheduled_at')
+            ->orderByDesc('matches.start_play_at')
+            ->orderByDesc('matches.updated_at')
             ->orderByDesc('matches.id')
             ->get();
 
@@ -111,46 +113,49 @@ class LiveConfigurationController extends Controller
             ->unique()
             ->values();
 
-        $playersByTeam = $teamIds->isEmpty()
+        $teamsById = $teamIds->isEmpty()
             ? collect()
-            : DB::table('tournament_team_members as members')
-                ->leftJoin('player_information', 'members.user_id', '=', 'player_information.user_id')
-                ->whereIn('members.group_id', $teamIds)
+            : LiveTeam::query()->whereIn('id', $teamIds)->get()->keyBy('id');
+        $playerIds = $teamsById
+            ->pluck('player_ids')
+            ->flatten()
+            ->filter()
+            ->unique()
+            ->values();
+        $playersById = $playerIds->isEmpty()
+            ? collect()
+            : DB::table('users')
+                ->leftJoin('player_information', 'users.id', '=', 'player_information.user_id')
+                ->whereIn('users.id', $playerIds)
                 ->select([
-                    'members.group_id',
-                    'members.user_id',
+                    'users.id',
+                    'users.email',
                     'player_information.first_name',
                     'player_information.middle_name',
                     'player_information.last_name',
                 ])
-                ->orderBy('members.id')
                 ->get()
-                ->groupBy('group_id');
-
-        $scoresByMatch = $matches->isEmpty()
-            ? collect()
-            : DB::table('tournament_live_scores')
-                ->whereIn('tournament_match_id', $matches->pluck('id'))
-                ->orderBy('set_number')
-                ->get()
-                ->groupBy('tournament_match_id');
+                ->keyBy('id');
 
         return response()->json([
-            'matches' => $matches->map(static function ($match) use ($playersByTeam, $scoresByMatch): array {
-                $teamPlayers = static function ($teamId) use ($playersByTeam): array {
+            'matches' => $matches->map(static function ($match) use ($teamsById, $playersById): array {
+                $teamPlayers = static function ($teamId) use ($teamsById, $playersById): array {
                     if ($teamId === null) {
                         return [];
                     }
 
-                    return ($playersByTeam->get($teamId) ?? collect())
-                        ->map(static function ($player): string {
+                    $team = $teamsById->get($teamId);
+
+                    return collect($team?->player_ids ?? [])
+                        ->map(static function (int $playerId) use ($playersById): string {
+                            $player = $playersById->get($playerId);
                             $name = trim(implode(' ', array_filter([
-                                $player->first_name,
-                                $player->middle_name,
-                                $player->last_name,
+                                $player?->first_name,
+                                $player?->middle_name,
+                                $player?->last_name,
                             ])));
 
-                            return $name !== '' ? $name : 'Player #'.$player->user_id;
+                            return $name !== '' ? $name : ($player?->email ?? 'Player #'.$playerId);
                         })
                         ->values()
                         ->all();
@@ -158,26 +163,19 @@ class LiveConfigurationController extends Controller
 
                 return [
                     'id' => (int) $match->id,
-                    'tournament' => $match->tournament_name ?? 'Tournament',
+                    'configuration' => $match->configuration_name ?? 'Live match',
                     'category' => $match->category_name ?? 'Category',
                     'status' => $match->status_name,
-                    'scheduled_at' => $match->scheduled_at,
-                    'started_at' => $match->started_at,
-                    'ended_at' => $match->ended_at,
+                    'scheduled_at' => $match->start_play_at ?? $match->updated_at,
+                    'started_at' => $match->start_play_at,
+                    'ended_at' => $match->end_play_at,
                     'team_a_players' => $teamPlayers($match->team_a_id),
                     'team_b_players' => $teamPlayers($match->team_b_id),
                     'score' => [
                         'team_a' => (int) $match->team_a_score,
                         'team_b' => (int) $match->team_b_score,
                     ],
-                    'sets' => ($scoresByMatch->get($match->id) ?? collect())
-                        ->map(static fn ($set): array => [
-                            'set_number' => (int) $set->set_number,
-                            'team_a_score' => (int) $set->team_a_score,
-                            'team_b_score' => (int) $set->team_b_score,
-                        ])
-                        ->values()
-                        ->all(),
+                    'sets' => [],
                 ];
             }),
         ]);

@@ -59,20 +59,21 @@ beforeEach(function () {
     ]);
 });
 
-it('lists umpires with their tournament match totals and match details', function () {
-    $tournamentId = DB::table('tournaments')->insertGetId([
-        'uuid' => (string) Str::uuid(),
-        'organization_id' => 1,
-        'title' => 'Summer Open',
-        'slug' => 'summer-open',
-        'start_date' => now(),
+it('lists umpires with their live match totals and match details', function () {
+    $configurationId = DB::table('live_configurations')->insertGetId([
+        'name' => 'Summer Open',
+        'number_of_courts' => 1,
+        'scoring_system' => 'rally-point',
+        'allow_court_change' => false,
+        'court_change_trigger' => 'none',
+        'status_id' => $this->activeStatus->id,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
-    $categoryId = DB::table('tournament_categories')->insertGetId([
-        'tournament_id' => $tournamentId,
+    $categoryId = DB::table('live_categories')->insertGetId([
+        'live_configuration_id' => $configurationId,
         'name' => 'Mixed Doubles',
-        'division' => 'Open',
+        'game_to' => 11,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
@@ -107,49 +108,47 @@ it('lists umpires with their tournament match totals and match details', functio
         'last_name' => 'Opponent',
     ]);
 
-    foreach ($teamAPlayers as $player) {
-        DB::table('tournament_team_members')->insert([
-            'tournament_registration_id' => 1,
-            'group_id' => 101,
-            'user_id' => $player->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    }
-
-    DB::table('tournament_team_members')->insert([
-        'tournament_registration_id' => 2,
-        'group_id' => 202,
-        'user_id' => $teamBPlayer->id,
+    $teamAId = DB::table('live_teams')->insertGetId([
+        'name' => 'Team A',
+        'category_id' => $categoryId,
+        'live_configuration_id' => $configurationId,
+        'player_ids' => $teamAPlayers->pluck('id')->toJson(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $teamBId = DB::table('live_teams')->insertGetId([
+        'name' => 'Team B',
+        'category_id' => $categoryId,
+        'live_configuration_id' => $configurationId,
+        'player_ids' => json_encode([$teamBPlayer->id]),
         'created_at' => now(),
         'updated_at' => now(),
     ]);
 
-    $matchId = DB::table('tournament_matches')->insertGetId([
-        'tournament_category_id' => $categoryId,
-        'group_id' => 1,
-        'bracket_id' => 1,
-        'court_id' => 1,
-        'official_id' => $this->umpire->id,
-        'tournament_category_format_id' => 1,
-        'team_a_id' => 101,
-        'team_b_id' => 202,
+    DB::table('live_match_scores')->insert([
+        'live_configuration_id' => $configurationId,
+        'court_number' => 1,
+        'category_id' => $categoryId,
+        'team_a_id' => $teamAId,
+        'team_b_id' => $teamBId,
         'team_a_score' => 15,
         'team_b_score' => 12,
         'status_id' => $this->activeStatus->id,
-        'scheduled_at' => '2026-10-30 10:00:00',
+        'umpire_id' => $this->umpire->id,
+        'start_play_at' => '2026-10-30 10:00:00',
+        'end_play_at' => '2026-10-30 10:30:00',
         'created_at' => now(),
         'updated_at' => now(),
     ]);
 
-    DB::table('tournament_live_scores')->insert([
-        'tournament_match_id' => $matchId,
-        'court_id' => 1,
-        'set_number' => 1,
-        'team_a_score' => 11,
-        'team_b_score' => 9,
-        'server_group_id' => 101,
+    DB::table('live_match_scores')->insert([
+        'live_configuration_id' => $configurationId,
+        'court_number' => 2,
+        'category_id' => $categoryId,
+        'team_a_id' => $teamAId,
+        'team_b_id' => $teamBId,
         'status_id' => $this->activeStatus->id,
+        'umpire_id' => null,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
@@ -163,15 +162,14 @@ it('lists umpires with their tournament match totals and match details', functio
 
     $this->getJson(route('admin.live-configuration.umpires.matches', $this->umpire))
         ->assertOk()
-        ->assertJsonPath('matches.0.tournament', 'Summer Open')
+        ->assertJsonPath('matches.0.configuration', 'Summer Open')
         ->assertJsonPath('matches.0.category', 'Mixed Doubles')
         ->assertJsonPath('matches.0.team_a_players.0', 'Alex Player')
         ->assertJsonPath('matches.0.team_a_players.1', 'Jamie Player')
         ->assertJsonPath('matches.0.team_b_players.0', 'Taylor Opponent')
         ->assertJsonPath('matches.0.score.team_a', 15)
         ->assertJsonPath('matches.0.score.team_b', 12)
-        ->assertJsonPath('matches.0.sets.0.team_a_score', 11)
-        ->assertJsonPath('matches.0.sets.0.team_b_score', 9);
+        ->assertJsonPath('matches.0.sets', []);
 });
 
 it('does not expose match details for a non-umpire account', function () {

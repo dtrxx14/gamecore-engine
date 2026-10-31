@@ -68,7 +68,7 @@ interface UmpireSummary {
 
 interface UmpireMatch {
     id: number;
-    tournament: string;
+    configuration: string;
     category: string;
     status: string | null;
     scheduled_at: string | null;
@@ -445,11 +445,11 @@ export default function LiveConfiguration({ configurations }: Props) {
                             </Button>
                         )}
                         <DialogTitle>
-                            {selectedUmpire ? `${selectedUmpire.name}’s tournament matches` : 'Umpire match history'}
+                            {selectedUmpire ? `${selectedUmpire.name}’s live matches` : 'Umpire match history'}
                         </DialogTitle>
                         <DialogDescription>
                             {selectedUmpire
-                                ? `${selectedUmpire.total_matches} tournament ${selectedUmpire.total_matches === 1 ? 'match' : 'matches'} umpired.`
+                                ? `${selectedUmpire.total_matches} ${selectedUmpire.total_matches === 1 ? 'match' : 'matches'} umpired.`
                                 : 'Select an umpire to view the matches they have officiated.'}
                         </DialogDescription>
                     </DialogHeader>
@@ -512,7 +512,7 @@ export default function LiveConfiguration({ configurations }: Props) {
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                                     <tr>
-                                        <th className="px-4 py-3 font-medium">Tournament / category</th>
+                                        <th className="px-4 py-3 font-medium">Configuration / category</th>
                                         <th className="px-4 py-3 font-medium">Players</th>
                                         <th className="px-4 py-3 text-center font-medium">Score</th>
                                         <th className="px-4 py-3 font-medium">Date</th>
@@ -536,14 +536,14 @@ export default function LiveConfiguration({ configurations }: Props) {
                                     ) : umpireMatches.length === 0 ? (
                                         <tr>
                                             <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                                                No tournament matches found for this umpire.
+                                                No live matches found for this umpire.
                                             </td>
                                         </tr>
                                     ) : (
                                         umpireMatches.map((match) => (
                                             <tr key={match.id}>
                                                 <td className="px-4 py-3">
-                                                    <div className="font-medium">{match.tournament}</div>
+                                                    <div className="font-medium">{match.configuration}</div>
                                                     <div className="text-xs text-muted-foreground">{match.category}</div>
                                                 </td>
                                                 <td className="px-4 py-3">
