@@ -175,8 +175,11 @@ it('lists umpires with their live match totals and match details', function () {
     $demoMatches = collect($matchHistoryResponse->json('matches'))->where('is_sample', true);
 
     expect($demoMatches)->toHaveCount(9)
-        ->and($demoMatches->first()['configuration'])->toBe('October Rally Classic')
-        ->and($demoMatches->first()['team_a_players'])->toBe(['Mia Santos'])
+        ->and($demoMatches->first()['configuration'])->toBe('OCTOBER RALLY CLASSIC')
+        ->and($demoMatches->first()['category'])->toBe('Intermediate Mixed Doubles')
+        ->and($demoMatches->first()['team_a_players'])->toBe(['MIA SANTOS', 'ETHAN CRUZ'])
+        ->and($demoMatches->first()['team_b_players'])->toBe(['AVA REYES', 'NOAH GARCIA'])
+        ->and($demoMatches->every(fn (array $match): bool => count($match['team_a_players']) === 2 && count($match['team_b_players']) === 2))->toBeTrue()
         ->and($demoMatches->first()['status'])->toBe('Completed');
 });
 
