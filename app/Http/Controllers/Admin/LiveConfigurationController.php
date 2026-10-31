@@ -22,6 +22,12 @@ use Inertia\Response;
 
 class LiveConfigurationController extends Controller
 {
+    private const SHOW_APRIL_UMPIRE_SAMPLE_MATCHES = true;
+
+    private const APRIL_UMPIRE_EMAIL = 'aprilten712@gmail.com';
+
+    private const APRIL_UMPIRE_SAMPLE_MATCH_COUNT = 9;
+
     /**
      * Display a listing of live configurations.
      */
@@ -72,8 +78,10 @@ class LiveConfigurationController extends Controller
                     'id' => (int) $umpire->id,
                     'name' => $name !== '' ? $name : $umpire->email,
                     'email' => $umpire->email,
-                    'total_matches' => (int) ($umpire->total_matches ?? 0) + ($umpire->email === 'aprilten712@gmail.com' ? 6 : 0),
-                    // 'total_matches' => (int) ($umpire->total_matches ?? 0)
+                    'total_matches' => (int) ($umpire->total_matches ?? 0)
+                        + ($umpire->email === self::APRIL_UMPIRE_EMAIL && self::SHOW_APRIL_UMPIRE_SAMPLE_MATCHES
+                            ? self::APRIL_UMPIRE_SAMPLE_MATCH_COUNT
+                            : 0),
                 ];
             });
 
@@ -138,48 +146,71 @@ class LiveConfigurationController extends Controller
                 ->get()
                 ->keyBy('id');
 
-        return response()->json([
-            'matches' => $matches->map(static function ($match) use ($teamsById, $playersById): array {
-                $teamPlayers = static function ($teamId) use ($teamsById, $playersById): array {
-                    if ($teamId === null) {
-                        return [];
-                    }
+        $matchHistory = $matches->map(static function ($match) use ($teamsById, $playersById): array {
+            $teamPlayers = static function ($teamId) use ($teamsById, $playersById): array {
+                if ($teamId === null) {
+                    return [];
+                }
 
-                    $team = $teamsById->get($teamId);
+                $team = $teamsById->get($teamId);
 
-                    return collect($team?->player_ids ?? [])
-                        ->map(static function (int $playerId) use ($playersById): string {
-                            $player = $playersById->get($playerId);
-                            $name = trim(implode(' ', array_filter([
-                                $player?->first_name,
-                                $player?->middle_name,
-                                $player?->last_name,
-                            ])));
+                return collect($team?->player_ids ?? [])
+                    ->map(static function (int $playerId) use ($playersById): string {
+                        $player = $playersById->get($playerId);
+                        $name = trim(implode(' ', array_filter([
+                            $player?->first_name,
+                            $player?->middle_name,
+                            $player?->last_name,
+                        ])));
 
-                            return $name !== '' ? $name : ($player?->email ?? 'Player #'.$playerId);
-                        })
-                        ->values()
-                        ->all();
-                };
+                        return $name !== '' ? $name : ($player?->email ?? 'Player #'.$playerId);
+                    })
+                    ->values()
+                    ->all();
+            };
 
-                return [
-                    'id' => (int) $match->id,
-                    'configuration' => $match->configuration_name ?? 'Live match',
-                    'category' => $match->category_name ?? 'Category',
-                    'status' => $match->status_name,
-                    'scheduled_at' => $match->start_play_at ?? $match->updated_at,
-                    'started_at' => $match->start_play_at,
-                    'ended_at' => $match->end_play_at,
-                    'team_a_players' => $teamPlayers($match->team_a_id),
-                    'team_b_players' => $teamPlayers($match->team_b_id),
+            return [
+                'id' => (int) $match->id,
+                'configuration' => $match->configuration_name ?? 'Live match',
+                'category' => $match->category_name ?? 'Category',
+                'status' => $match->status_name,
+                'scheduled_at' => $match->start_play_at ?? $match->updated_at,
+                'started_at' => $match->start_play_at,
+                'ended_at' => $match->end_play_at,
+                'team_a_players' => $teamPlayers($match->team_a_id),
+                'team_b_players' => $teamPlayers($match->team_b_id),
+                'score' => [
+                    'team_a' => (int) $match->team_a_score,
+                    'team_b' => (int) $match->team_b_score,
+                ],
+                'sets' => [],
+            ];
+        })
+            ->values();
+
+        if ($umpire->email === self::APRIL_UMPIRE_EMAIL && self::SHOW_APRIL_UMPIRE_SAMPLE_MATCHES) {
+            for ($sampleNumber = 1; $sampleNumber <= self::APRIL_UMPIRE_SAMPLE_MATCH_COUNT; $sampleNumber++) {
+                $matchHistory->push([
+                    'id' => -$sampleNumber,
+                    'configuration' => 'Sample match history '.$sampleNumber,
+                    'category' => 'Sample history',
+                    'status' => 'Sample',
+                    'scheduled_at' => now()->subDays($sampleNumber)->toIso8601String(),
+                    'started_at' => null,
+                    'ended_at' => null,
+                    'team_a_players' => ['Sample Player A'.$sampleNumber],
+                    'team_b_players' => ['Sample Player B'.$sampleNumber],
                     'score' => [
-                        'team_a' => (int) $match->team_a_score,
-                        'team_b' => (int) $match->team_b_score,
+                        'team_a' => 11,
+                        'team_b' => 8,
                     ],
                     'sets' => [],
-                ];
-            }),
-        ]);
+                    'is_sample' => true,
+                ]);
+            }
+        }
+
+        return response()->json(['matches' => $matchHistory]);
     }
 
     /**

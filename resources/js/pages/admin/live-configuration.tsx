@@ -68,6 +68,7 @@ interface UmpireSummary {
 
 interface UmpireMatch {
     id: number;
+    is_sample?: boolean;
     configuration: string;
     category: string;
     status: string | null;
@@ -544,7 +545,10 @@ export default function LiveConfiguration({ configurations }: Props) {
                                             <tr key={match.id}>
                                                 <td className="px-4 py-3">
                                                     <div className="font-medium">{match.configuration}</div>
-                                                    <div className="text-xs text-muted-foreground">{match.category}</div>
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        {match.category}
+                                                        {match.is_sample && <Badge variant="outline">Sample</Badge>}
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div>{match.team_a_players.join(' / ') || 'Team A'}</div>

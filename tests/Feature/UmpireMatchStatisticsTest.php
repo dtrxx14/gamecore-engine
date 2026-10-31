@@ -157,10 +157,10 @@ it('lists umpires with their live match totals and match details', function () {
         ->getJson(route('admin.live-configuration.umpire-statistics'))
         ->assertOk()
         ->assertJsonPath('umpires.0.name', 'Morgan Official')
-        ->assertJsonPath('umpires.0.total_matches', 7)
+        ->assertJsonPath('umpires.0.total_matches', 10)
         ->assertJsonPath('umpires.1.total_matches', 0);
 
-    $this->getJson(route('admin.live-configuration.umpires.matches', $this->umpire))
+    $matchHistoryResponse = $this->getJson(route('admin.live-configuration.umpires.matches', $this->umpire))
         ->assertOk()
         ->assertJsonPath('matches.0.configuration', 'Summer Open')
         ->assertJsonPath('matches.0.category', 'Mixed Doubles')
@@ -169,7 +169,10 @@ it('lists umpires with their live match totals and match details', function () {
         ->assertJsonPath('matches.0.team_b_players.0', 'Taylor Opponent')
         ->assertJsonPath('matches.0.score.team_a', 15)
         ->assertJsonPath('matches.0.score.team_b', 12)
-        ->assertJsonPath('matches.0.sets', []);
+        ->assertJsonPath('matches.0.sets', [])
+        ->assertJsonCount(10, 'matches');
+
+    expect(collect($matchHistoryResponse->json('matches'))->where('is_sample', true))->toHaveCount(9);
 });
 
 it('does not expose match details for a non-umpire account', function () {
