@@ -190,15 +190,15 @@ class LiveConfigurationController extends Controller
 
         if ($umpire->email === self::APRIL_UMPIRE_EMAIL && self::SHOW_APRIL_UMPIRE_SAMPLE_MATCHES) {
             $demoMatchDetails = [
-                ['configuration' => 'OCTOBER RALLY CLASSIC', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'MIA SANTOS / ETHAN CRUZ', 'team_b' => 'AVA REYES / NOAH GARCIA', 'score_a' => 11, 'score_b' => 8],
-                ['configuration' => 'CITYWIDE PICKLEBALL OPEN', 'category' => 'Intermediate Womens Doubles', 'team_a' => 'OLIVIA REYES / CHLOE GARCIA', 'team_b' => 'SOFIA CRUZ / ELLA RAMOS', 'score_a' => 11, 'score_b' => 7],
-                ['configuration' => 'AUTUMN COURTS CHAMPIONSHIP', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'NOAH LIM / LUCAS TAN', 'team_b' => 'LIAM FLORES / MATEO RUIZ', 'score_a' => 9, 'score_b' => 11],
-                ['configuration' => 'RIVERSIDE INVITATIONAL', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'AVA MENDOZA / CALEB DIZON', 'team_b' => 'MAYA CASTILLO / LEO AQUINO', 'score_a' => 11, 'score_b' => 6],
-                ['configuration' => 'WEEKEND RALLY SERIES', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'GABRIEL TORRES / DANIEL NAVARRO', 'team_b' => 'JULIAN REYES / ENZO GARCIA', 'score_a' => 11, 'score_b' => 9],
-                ['configuration' => 'COMMUNITY CUP FINALS', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'ISABELLA RAMOS / SOFIA CRUZ', 'team_b' => 'GRACE BAUTISTA / ELLA FLORES', 'score_a' => 8, 'score_b' => 11],
-                ['configuration' => 'HARBORVIEW SPORTS OPEN', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'SAMUEL AQUINO / ZOE CASTILLO', 'team_b' => 'MARCOS DELA CRUZ / LARA BAUTISTA', 'score_a' => 11, 'score_b' => 5],
-                ['configuration' => 'METRO REC LEAGUE', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'ADRIAN VALDEZ / MARCO SANTOS', 'team_b' => 'JULIAN REYES / ENZO GARCIA', 'score_a' => 11, 'score_b' => 10],
-                ['configuration' => 'SUNDAY DOUBLES CHALLENGE', 'category' => 'Intermediate Womens Doubles', 'team_a' => 'AMARA VILLANUEVA / NINA MERCADO', 'team_b' => 'IRIS VALDEZ / LIA MENDOZA', 'score_a' => 7, 'score_b' => 11],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'MIA SANTOS / ETHAN CRUZ', 'team_b' => 'AVA REYES / NOAH GARCIA', 'score_a' => 11, 'score_b' => 8],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Womens Doubles', 'team_a' => 'OLIVIA REYES / CHLOE GARCIA', 'team_b' => 'SOFIA CRUZ / ELLA RAMOS', 'score_a' => 11, 'score_b' => 7],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'NOAH LIM / LUCAS TAN', 'team_b' => 'LIAM FLORES / MATEO RUIZ', 'score_a' => 9, 'score_b' => 11],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'AVA MENDOZA / CALEB DIZON', 'team_b' => 'MAYA CASTILLO / LEO AQUINO', 'score_a' => 11, 'score_b' => 6],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'GABRIEL TORRES / DANIEL NAVARRO', 'team_b' => 'JULIAN REYES / ENZO GARCIA', 'score_a' => 11, 'score_b' => 9],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'ISABELLA RAMOS / SOFIA CRUZ', 'team_b' => 'GRACE BAUTISTA / ELLA FLORES', 'score_a' => 8, 'score_b' => 11],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Mixed Doubles', 'team_a' => 'SAMUEL AQUINO / ZOE CASTILLO', 'team_b' => 'MARCOS DELA CRUZ / LARA BAUTISTA', 'score_a' => 11, 'score_b' => 5],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Mens Doubles', 'team_a' => 'ADRIAN VALDEZ / MARCO SANTOS', 'team_b' => 'JULIAN REYES / ENZO GARCIA', 'score_a' => 11, 'score_b' => 10],
+                ['configuration' => 'First Stryx - Elimination', 'category' => 'Intermediate Womens Doubles', 'team_a' => 'AMARA VILLANUEVA / NINA MERCADO', 'team_b' => 'IRIS VALDEZ / LIA MENDOZA', 'score_a' => 7, 'score_b' => 11],
             ];
 
             for ($sampleNumber = 1; $sampleNumber <= self::APRIL_UMPIRE_SAMPLE_MATCH_COUNT; $sampleNumber++) {
